@@ -1,0 +1,17 @@
+# Invalid test configuration - missing required fields
+
+global:
+  hypervisor:
+    type: invalid_type  # Invalid hypervisor type
+    host: pve.homelab.local
+    # Missing username field
+  
+  backup:
+    enabled: true
+    root: relative/path  # Invalid - must be absolute
+    retention_days: -5   # Invalid - must be positive
+
+services:
+  - name: test_service
+    type: invalid_service_type  # Invalid service type
+    enabled: true

@@ -1,0 +1,14 @@
+# Configuration to merge/override
+
+global:
+  backup:
+    retention_days: 60  # Override from 30 to 60
+    compression: false  # Override from true to false
+  
+  update:
+    auto_update: true  # Override from false to true
+
+services:
+  - name: additional_service
+    type: docker
+    enabled: true

@@ -1,0 +1,50 @@
+# Valid test configuration for Homelab Autopilot
+
+global:
+  hypervisor:
+    type: proxmox
+    host: pve.homelab.local
+    username: root@pam
+    password: test_password
+    verify_ssl: false
+  
+  backup:
+    enabled: true
+    root: /mnt/backups
+    retention_days: 30
+    compression: true
+  
+  update:
+    enabled: true
+    auto_update: false
+    check_interval_hours: 24
+  
+  monitoring:
+    enabled: true
+    check_interval_minutes: 5
+  
+  notification:
+    enabled: true
+    type: email
+    settings:
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      from_addr: autopilot@homelab.local
+      to_addr: admin@homelab.local
+
+services:
+  - name: plex
+    type: docker
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+    container_name: plex
+    
+  - name: nginx
+    type: systemd
+    enabled: true
+    backup: true
+    update: false
+    monitor: true
+    service_name: nginx.service

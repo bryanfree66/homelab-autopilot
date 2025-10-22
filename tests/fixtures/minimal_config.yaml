@@ -1,0 +1,15 @@
+# Minimal valid configuration
+
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  
+  backup:
+    root: /tmp/backups
+  
+  notification:
+    type: email
+    settings:
+      smtp_host: localhost
