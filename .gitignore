@@ -1,0 +1,87 @@
+# Homelab Autopilot - gitignore
+
+# User configuration files (keep examples only)
+homelab-autopilot.yaml
+services.d/*.yaml
+!*.yaml.example
+
+# State and runtime data
+*.db
+*.pid
+*.lock
+
+# Logs
+*.log
+logs/
+
+# Backups (never commit actual backup data)
+backups/
+*.tar.gz
+*.zip
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+*.manifest
+*.spec
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Shell history
+.bash_history
+.zsh_history
+
+# Secrets (be extra careful)
+*.key
+*.pem
+*.secret
+*.env
+credentials/
+secrets/
+
+# Test artifacts
+test-results/
+coverage/
+
+# Distribution / packaging
+dist/
+build/
+*.deb
+*.rpm
