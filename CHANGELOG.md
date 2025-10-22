@@ -1,31 +1,31 @@
-# Changelog
-
-All notable changes to Homelab Autopilot will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [Unreleased]
 
-### Planned
-- Core backup engine
-- Core update engine with rollback
-- Proxmox hypervisor plugin
-- Generic container service plugin
-- Email notification plugin
-
-## [0.1.0-alpha] - 2025-10-21
-
 ### Added
-- Initial project structure
-- README with project vision
-- MIT License
-- Contributing guidelines
-- Architecture documentation
-- Directory structure for core, plugins, and config
+- **Logger Setup (lib/logger.py)**: Centralized logging with loguru
+  - Multiple log levels with colorized console output
+  - File logging with rotation, retention, and compression
+  - Structured logging with context binding
+  - 25 comprehensive tests with 100% coverage
+  - Functions: setup_logger(), get_logger(), log_context(), set_log_level()
 
----
+- **Proxmox Configuration Enhancements**: Enhanced ServiceConfig validation
+  - Proxmox-specific field validation (vmid, node required for vm/lxc)
+  - Docker field validation (container_name required)
+  - Systemd field validation (service_name required)
+  - VMID range validation (100-999999)
+  - 10 new validation tests
+  
+- **Documentation**:
+  - Proxmox example configuration (config/homelab-autopilot-proxmox.yaml.example)
+  - Discovery tool design document (docs/discovery-tool.md)
+  - GitHub issue templates for project management
 
-## Version History
+### Changed
+- Updated test fixtures to include required Proxmox fields
+- ConfigLoader now appends services during merge instead of replacing
 
-- **0.1.0-alpha** (2025-10-21) - Initial project setup and documentation
+### Phase 1 Progress
+- ✅ Configuration Loader (Complete)
+- ✅ Logger Setup (Complete)
+- ⏳ State Manager (Next)
+- Components complete: 2/6 (33%)

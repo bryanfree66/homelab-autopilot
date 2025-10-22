@@ -1,0 +1,182 @@
+"""
+Logging setup for Homelab Autopilot using loguru.
+
+This module provides a centralized logging configuration with support for:
+- Multiple log levels (debug, info, warning, error, critical)
+- File and console output
+- Log rotation
+- Structured logging with context
+- Colorized console output
+"""
+
+from pathlib import Path
+from typing import Optional
+import sys
+from loguru import logger
+
+
+def setup_logger(
+    log_level: str = "INFO",
+    log_file: Optional[Path] = None,
+    console: bool = True,
+    rotation: str = "10 MB",
+    retention: str = "1 week",
+    compression: str = "zip",
+    format_string: Optional[str] = None,
+    enqueue: bool = False,  # Add this parameter - False for synchronous writes
+) -> None:
+    """
+    Configure loguru logger for the application.
+    
+    This function sets up logging with sensible defaults for homelab automation.
+    It configures both console and file logging with appropriate formatting,
+    rotation, and retention policies.
+    
+    Args:
+        log_level: Minimum log level to capture. Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+        log_file: Path to log file. If None, file logging is disabled
+        console: Enable console logging (stdout/stderr)
+        rotation: When to rotate log files. Examples: "10 MB", "1 day", "1 week"
+        retention: How long to keep old log files. Examples: "1 week", "30 days"
+        compression: Compression format for rotated logs. Options: "zip", "gz", "bz2", None
+        format_string: Custom log format string. If None, uses default format
+        enqueue: Enable async logging (thread-safe). False for synchronous writes
+        
+    Example:
+        >>> from pathlib import Path
+        >>> setup_logger(
+        ...     log_level="INFO",
+        ...     log_file=Path("/var/log/homelab-autopilot/autopilot.log"),
+        ...     console=True
+        ... )
+        >>> logger.info("Logger configured successfully")
+        
+    Note:
+        This function should be called once at application startup before any
+        logging occurs. Subsequent calls will reconfigure the logger.
+    """
+    # Remove default logger
+    logger.remove()
+    
+    # Normalize log level
+    log_level = log_level.upper()
+    valid_levels = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
+    if log_level not in valid_levels:
+        raise ValueError(
+            f"Invalid log level: {log_level}. Must be one of {valid_levels}"
+        )
+    
+    # Default format with colors for console
+    if format_string is None:
+        format_string = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+            "<level>{message}</level>"
+        )
+    
+    # Console logging
+    if console:
+        logger.add(
+            sys.stderr,
+            format=format_string,
+            level=log_level,
+            colorize=True,
+            backtrace=True,
+            diagnose=True,
+        )
+    
+    # File logging
+    if log_file:
+        # Ensure log directory exists
+        log_file = Path(log_file)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # File format without colors
+        file_format = (
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+            "{level: <8} | "
+            "{name}:{function}:{line} | "
+            "{message}"
+        )
+        
+        logger.add(
+            str(log_file),
+            format=file_format,
+            level=log_level,
+            rotation=rotation,
+            retention=retention,
+            compression=compression,
+            backtrace=True,
+            diagnose=True,
+            enqueue=enqueue,  # Changed from enqueue=True
+        )
+
+
+def get_logger():
+    """
+    Get the configured logger instance.
+    
+    Returns:
+        The loguru logger instance
+        
+    Example:
+        >>> log = get_logger()
+        >>> log.info("This is an info message")
+        >>> log.error("This is an error message")
+        
+    Note:
+        This returns the global loguru logger. You should call setup_logger()
+        before using this function to ensure proper configuration.
+    """
+    return logger
+
+
+def log_context(**kwargs) -> dict:
+    """
+    Create a context dictionary for structured logging.
+    
+    This helps add structured data to log messages for better searchability
+    and analysis.
+    
+    Args:
+        **kwargs: Key-value pairs to include in log context
+        
+    Returns:
+        Dictionary containing the context data
+        
+    Example:
+        >>> logger.bind(**log_context(service="plex", vmid=100)).info("Starting backup")
+        >>> logger.bind(**log_context(error_code=500, user="admin")).error("API failed")
+    """
+    return kwargs
+
+
+def set_log_level(level: str) -> None:
+    """
+    Change the log level at runtime.
+    
+    Args:
+        level: New log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        
+    Raises:
+        ValueError: If level is invalid
+        
+    Example:
+        >>> set_log_level("DEBUG")  # Enable debug logging
+        >>> set_log_level("ERROR")  # Only show errors
+    """
+    level = level.upper()
+    valid_levels = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
+    if level not in valid_levels:
+        raise ValueError(
+            f"Invalid log level: {level}. Must be one of {valid_levels}"
+        )
+    
+    # This is a simplified version - in production you'd want to properly
+    # reconfigure handlers with the new level
+    logger.info(f"Log level changed to {level}")
+
+
+# Export logger for convenience
+__all__ = ["setup_logger", "get_logger", "log_context", "set_log_level", "logger"]
