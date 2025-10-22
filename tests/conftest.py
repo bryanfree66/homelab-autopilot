@@ -4,11 +4,11 @@ Shared pytest fixtures and configuration for Homelab Autopilot tests.
 This module provides common fixtures used across multiple test files.
 """
 
-from pathlib import Path
-from typing import Dict, Any
-import pytest
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict
 
+import pytest
 
 # Mock ServiceConfig for tests that don't need full config_loader
 
@@ -167,6 +167,8 @@ def sample_hostnames():
 
 def pytest_configure(config):
     """Configure custom pytest markers."""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
     config.addinivalue_line("markers", "integration: marks tests as integration tests")
     config.addinivalue_line("markers", "unit: marks tests as unit tests")
