@@ -136,15 +136,23 @@ More documentation coming as features are implemented!
 - [ ] Recovery actions
 
 ### Phase 5: CLI & Scheduling 📅 PLANNED
-- [ ] Command-line interface
+- [ ] Command-line interface (click-based)
+- [ ] **Configuration discovery tool** ⭐ NEW
+  - Auto-scan Proxmox infrastructure
+  - Generate initial config with smart defaults
+  - Interactive setup wizard
+  - See [design document](docs/discovery-tool.md)
 - [ ] Cron/systemd integration
 - [ ] Interactive configuration
+- [ ] Dry-run mode for all operations
 
 ### Phase 6: Advanced Features 📅 PLANNED
 - [ ] Web dashboard
 - [ ] Additional hypervisors (ESXi, KVM)
-- [ ] Cloud storage backends
-- [ ] Advanced notifications
+- [ ] Multi-hypervisor discovery support
+- [ ] Cloud storage backends (S3, B2, etc.)
+- [ ] Advanced notifications (Discord, webhooks)
+- [ ] Config diff and merge tools
 
 ## 🛠️ Technology Stack
 
