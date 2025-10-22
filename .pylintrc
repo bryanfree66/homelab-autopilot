@@ -1,0 +1,119 @@
+[MASTER]
+# Use multiple processes to speed up Pylint
+jobs=0
+
+# Python version to target
+py-version=3.10
+
+# Add files or directories matching the regex patterns to the ignore list
+ignore=CVS,.git,__pycache__,.pytest_cache,venv,env,.venv,.env
+
+# Add paths to the list of the source roots (for resolving imports)
+init-hook='import sys; sys.path.append(".")'
+
+[MESSAGES CONTROL]
+# Disable specific warnings that conflict with black or are too strict
+disable=
+    C0103,  # Invalid name (let developers choose reasonable names)
+    C0114,  # Missing module docstring (not always needed)
+    C0115,  # Missing class docstring (will add where needed)
+    C0116,  # Missing function docstring (will add for public APIs)
+    R0903,  # Too few public methods (fine for data classes, configs)
+    R0913,  # Too many arguments (sometimes necessary)
+    R0917,  # Too many positional arguments (sometimes necessary)
+    W0212,  # Access to protected member (sometimes needed for testing)
+    W0511,  # TODO comments (we want to keep TODOs)
+    C0301,  # Line too long (black handles this)
+    C0303,  # Trailing whitespace (black handles this)
+    C0304,  # Final newline (black handles this)
+    C0305,  # Trailing newlines (black handles this)
+    C0321,  # Multiple statements on one line (black handles this)
+    R0801,  # Similar lines in files (too noisy for now)
+    R1705,  # Unnecessary "elif" after "return" (stylistic choice)
+    R0911,  # Too many return statements (sometimes clearer)
+
+[FORMAT]
+# Maximum number of characters on a single line (match black)
+max-line-length=88
+
+# Maximum number of lines in a module
+max-module-lines=1000
+
+[BASIC]
+# Good variable names which should always be accepted
+good-names=i,j,k,ex,Run,_,id,db,vm,os,ip,ok
+
+# Regular expression matching correct constant names
+const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
+
+# Regular expression matching correct function names
+function-rgx=[a-z_][a-z0-9_]{2,50}$
+
+# Regular expression matching correct method names
+method-rgx=[a-z_][a-z0-9_]{2,50}$
+
+# Regular expression matching correct variable names
+variable-rgx=[a-z_][a-z0-9_]{0,30}$
+
+# Regular expression matching correct attribute names
+attr-rgx=[a-z_][a-z0-9_]{0,30}$
+
+# Regular expression matching correct argument names
+argument-rgx=[a-z_][a-z0-9_]{0,30}$
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=7
+
+# Maximum number of attributes for a class
+max-attributes=10
+
+# Maximum number of boolean expressions in an if statement
+max-bool-expr=5
+
+# Maximum number of branch for function / method body
+max-branches=12
+
+# Maximum number of locals for function / method body
+max-locals=15
+
+# Maximum number of parents for a class
+max-parents=7
+
+# Maximum number of public methods for a class
+max-public-methods=20
+
+# Maximum number of return / yield for function / method body
+max-returns=8
+
+# Maximum number of statements in function / method body
+max-statements=50
+
+# Minimum number of public methods for a class
+min-public-methods=1
+
+[IMPORTS]
+# Allow wildcard imports from typing
+allow-wildcard-with-all=no
+
+[EXCEPTIONS]
+# Exceptions that will emit a warning when being caught
+overgeneral-exceptions=builtins.BaseException,builtins.Exception
+
+[TYPECHECK]
+# List of decorators that produce context managers
+contextmanager-decorators=contextlib.contextmanager
+
+# Tells whether missing members accessed in mixin class should be ignored
+ignore-mixin-members=yes
+
+# List of classes names for which member attributes should not be checked
+ignored-classes=SQLObject,optparse.Values,thread._local,_thread._local,pytest
+
+[REFACTORING]
+# Maximum number of nested blocks for function / method body
+max-nested-blocks=5
+
+[LOGGING]
+# The type of string formatting that logging methods do
+logging-format-style=new

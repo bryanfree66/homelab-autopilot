@@ -27,11 +27,11 @@ def setup_logger(
 ) -> None:
     """
     Configure loguru logger for the application.
-    
+
     This function sets up logging with sensible defaults for homelab automation.
     It configures both console and file logging with appropriate formatting,
     rotation, and retention policies.
-    
+
     Args:
         log_level: Minimum log level to capture. Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
         log_file: Path to log file. If None, file logging is disabled
@@ -41,7 +41,7 @@ def setup_logger(
         compression: Compression format for rotated logs. Options: "zip", "gz", "bz2", None
         format_string: Custom log format string. If None, uses default format
         enqueue: Enable async logging (thread-safe). False for synchronous writes
-        
+
     Example:
         >>> from pathlib import Path
         >>> setup_logger(
@@ -50,14 +50,14 @@ def setup_logger(
         ...     console=True
         ... )
         >>> logger.info("Logger configured successfully")
-        
+
     Note:
         This function should be called once at application startup before any
         logging occurs. Subsequent calls will reconfigure the logger.
     """
     # Remove default logger
     logger.remove()
-    
+
     # Normalize log level
     log_level = log_level.upper()
     valid_levels = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
@@ -65,7 +65,7 @@ def setup_logger(
         raise ValueError(
             f"Invalid log level: {log_level}. Must be one of {valid_levels}"
         )
-    
+
     # Default format with colors for console
     if format_string is None:
         format_string = (
@@ -74,7 +74,7 @@ def setup_logger(
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
             "<level>{message}</level>"
         )
-    
+
     # Console logging
     if console:
         logger.add(
@@ -85,13 +85,13 @@ def setup_logger(
             backtrace=True,
             diagnose=True,
         )
-    
+
     # File logging
     if log_file:
         # Ensure log directory exists
         log_file = Path(log_file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # File format without colors
         file_format = (
             "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
@@ -99,7 +99,7 @@ def setup_logger(
             "{name}:{function}:{line} | "
             "{message}"
         )
-        
+
         logger.add(
             str(log_file),
             format=file_format,
@@ -116,15 +116,15 @@ def setup_logger(
 def get_logger():
     """
     Get the configured logger instance.
-    
+
     Returns:
         The loguru logger instance
-        
+
     Example:
         >>> log = get_logger()
         >>> log.info("This is an info message")
         >>> log.error("This is an error message")
-        
+
     Note:
         This returns the global loguru logger. You should call setup_logger()
         before using this function to ensure proper configuration.
@@ -135,16 +135,16 @@ def get_logger():
 def log_context(**kwargs) -> dict:
     """
     Create a context dictionary for structured logging.
-    
+
     This helps add structured data to log messages for better searchability
     and analysis.
-    
+
     Args:
         **kwargs: Key-value pairs to include in log context
-        
+
     Returns:
         Dictionary containing the context data
-        
+
     Example:
         >>> logger.bind(**log_context(service="plex", vmid=100)).info("Starting backup")
         >>> logger.bind(**log_context(error_code=500, user="admin")).error("API failed")
@@ -155,13 +155,13 @@ def log_context(**kwargs) -> dict:
 def set_log_level(level: str) -> None:
     """
     Change the log level at runtime.
-    
+
     Args:
         level: New log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        
+
     Raises:
         ValueError: If level is invalid
-        
+
     Example:
         >>> set_log_level("DEBUG")  # Enable debug logging
         >>> set_log_level("ERROR")  # Only show errors
@@ -169,10 +169,8 @@ def set_log_level(level: str) -> None:
     level = level.upper()
     valid_levels = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
     if level not in valid_levels:
-        raise ValueError(
-            f"Invalid log level: {level}. Must be one of {valid_levels}"
-        )
-    
+        raise ValueError(f"Invalid log level: {level}. Must be one of {valid_levels}")
+
     # This is a simplified version - in production you'd want to properly
     # reconfigure handlers with the new level
     logger.info(f"Log level changed to {level}")
