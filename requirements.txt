@@ -1,0 +1,17 @@
+# Homelab Autopilot - Production Dependencies
+# Python 3.10+
+
+# Configuration
+pyyaml>=6.0.1
+
+# Logging
+loguru>=0.7.0
+
+# CLI
+click>=8.1.0
+
+# HTTP requests (for monitoring)
+requests>=2.31.0
+
+# Process management
+psutil>=5.9.0
