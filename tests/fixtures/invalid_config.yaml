@@ -1,5 +1,3 @@
-# Invalid test configuration - missing required fields
-
 global:
   hypervisor:
     type: invalid_type  # Invalid hypervisor type
@@ -15,3 +13,14 @@ services:
   - name: test_service
     type: invalid_service_type  # Invalid service type
     enabled: true
+  
+  # Missing vmid for lxc type
+  - name: incomplete_lxc
+    type: lxc
+    node: pve
+    # Missing vmid - should fail validation
+  
+  # Missing container_name for docker type
+  - name: incomplete_docker
+    type: docker
+    # Missing container_name - should fail validation

@@ -8,8 +8,7 @@ and convenient dot-notation access to configuration values.
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import yaml
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, ValidationError
 
 
 class HypervisorConfig(BaseModel):
@@ -133,12 +132,24 @@ class ServiceConfig(BaseModel):
     
     model_config = ConfigDict(extra='allow')  # Allow extra fields for service-specific config
     
+    # Core fields
     name: str = Field(..., description="Service name")
-    type: str = Field(..., description="Service type (e.g., 'docker', 'systemd')")
+    type: str = Field(..., description="Service type (e.g., 'docker', 'systemd', 'vm', 'lxc')")
     enabled: bool = Field(True, description="Enable this service")
     backup: bool = Field(True, description="Include in backups")
     update: bool = Field(True, description="Include in updates")
     monitor: bool = Field(True, description="Include in monitoring")
+    
+    # Proxmox-specific fields (required for vm/lxc types)
+    vmid: Optional[int] = Field(None, description="Proxmox VM/LXC ID (100-999999)")
+    node: Optional[str] = Field(None, description="Proxmox node name")
+    
+    # Docker-specific fields
+    container_name: Optional[str] = Field(None, description="Docker container name")
+    compose_file: Optional[Path] = Field(None, description="Path to docker-compose.yml")
+    
+    # Systemd-specific fields
+    service_name: Optional[str] = Field(None, description="Systemd service name (e.g., nginx.service)")
     
     @field_validator('type')
     @classmethod
@@ -148,6 +159,46 @@ class ServiceConfig(BaseModel):
         if v.lower() not in allowed_types:
             raise ValueError(f"Service type must be one of {allowed_types}")
         return v.lower()
+    
+    @field_validator('vmid')
+    @classmethod
+    def validate_vmid(cls, v: Optional[int]) -> Optional[int]:
+        """Validate Proxmox VMID is in valid range."""
+        if v is not None and (v < 100 or v > 999999):
+            raise ValueError("Proxmox VMID must be between 100 and 999999")
+        return v
+    
+    @model_validator(mode='after')
+    def validate_proxmox_fields(self) -> 'ServiceConfig':
+        """Ensure Proxmox services have required fields."""
+        if self.type in ['vm', 'lxc']:
+            if self.vmid is None:
+                raise ValueError(
+                    f"Service '{self.name}' of type '{self.type}' requires 'vmid' field"
+                )
+            if self.node is None:
+                raise ValueError(
+                    f"Service '{self.name}' of type '{self.type}' requires 'node' field"
+                )
+        return self
+    
+    @model_validator(mode='after')
+    def validate_docker_fields(self) -> 'ServiceConfig':
+        """Ensure Docker services have required fields."""
+        if self.type == 'docker' and self.container_name is None:
+            raise ValueError(
+                f"Service '{self.name}' of type 'docker' requires 'container_name' field"
+            )
+        return self
+    
+    @model_validator(mode='after')
+    def validate_systemd_fields(self) -> 'ServiceConfig':
+        """Ensure systemd services have required fields."""
+        if self.type == 'systemd' and self.service_name is None:
+            raise ValueError(
+                f"Service '{self.name}' of type 'systemd' requires 'service_name' field"
+            )
+        return self
 
 
 class HomeLabConfig(BaseModel):

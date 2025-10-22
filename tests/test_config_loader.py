@@ -295,7 +295,9 @@ class TestServiceAccess:
         assert plex is not None
         assert isinstance(plex, ServiceConfig)
         assert plex.name == "plex"
-        assert plex.type == "docker"
+        assert plex.type == "lxc"
+        assert plex.vmid == 100
+        assert plex.node == "pve"
     
     def test_get_nonexistent_service(self, valid_loader):
         """Test getting non-existent service returns None."""
@@ -466,6 +468,7 @@ global:
 services:
   - name: test
     type: DOCKER
+    container_name: test_container
 """)
         
         loader = ConfigLoader(config_file)
@@ -542,6 +545,7 @@ global:
 services:
   - name: test
     type: docker
+    container_name: test_container
     custom_field: custom_value
     another_field: 123
 """)
@@ -553,3 +557,263 @@ services:
         # Extra fields should be accessible
         assert hasattr(service, "custom_field")
         assert service.custom_field == "custom_value"
+
+# Test: Proxmox-Specific Validation
+class TestProxmoxValidation:
+    """Test Proxmox-specific field validation."""
+    
+    def test_vm_requires_vmid(self, tmp_path):
+        """Test that VM type requires vmid field."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_vm
+    type: vm
+    node: pve
+""")
+        with pytest.raises(ValidationError) as exc_info:
+            ConfigLoader(config_file)
+        
+        errors = exc_info.value.errors()
+        assert any("vmid" in str(e).lower() for e in errors)
+    
+    def test_vm_requires_node(self, tmp_path):
+        """Test that VM type requires node field."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_vm
+    type: vm
+    vmid: 100
+""")
+        with pytest.raises(ValidationError) as exc_info:
+            ConfigLoader(config_file)
+        
+        errors = exc_info.value.errors()
+        assert any("node" in str(e).lower() for e in errors)
+    
+    def test_lxc_requires_vmid_and_node(self, tmp_path):
+        """Test that LXC type requires both vmid and node."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_lxc
+    type: lxc
+""")
+        with pytest.raises(ValidationError) as exc_info:
+            ConfigLoader(config_file)
+        
+        errors = exc_info.value.errors()
+        assert any("vmid" in str(e).lower() for e in errors)
+    
+    def test_vmid_range_validation(self, tmp_path):
+        """Test that vmid must be between 100 and 999999."""
+        # Test vmid too low
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_vm
+    type: vm
+    vmid: 99
+    node: pve
+""")
+        with pytest.raises(ValidationError) as exc_info:
+            ConfigLoader(config_file)
+        
+        errors = exc_info.value.errors()
+        assert any("100" in str(e) and "999999" in str(e) for e in errors)
+    
+    def test_vmid_valid_range(self, tmp_path):
+        """Test that valid vmid range works."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_vm
+    type: vm
+    vmid: 100
+    node: pve
+""")
+        # Should not raise
+        loader = ConfigLoader(config_file)
+        service = loader.get_service_config("test_vm")
+        assert service.vmid == 100
+        assert service.node == "pve"
+    
+    def test_docker_requires_container_name(self, tmp_path):
+        """Test that Docker type requires container_name field."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_docker
+    type: docker
+""")
+        with pytest.raises(ValidationError) as exc_info:
+            ConfigLoader(config_file)
+        
+        errors = exc_info.value.errors()
+        assert any("container_name" in str(e).lower() for e in errors)
+    
+    def test_docker_with_container_name(self, tmp_path):
+        """Test that Docker with container_name works."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_docker
+    type: docker
+    container_name: my_container
+""")
+        # Should not raise
+        loader = ConfigLoader(config_file)
+        service = loader.get_service_config("test_docker")
+        assert service.container_name == "my_container"
+    
+    def test_systemd_requires_service_name(self, tmp_path):
+        """Test that systemd type requires service_name field."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_systemd
+    type: systemd
+""")
+        with pytest.raises(ValidationError) as exc_info:
+            ConfigLoader(config_file)
+        
+        errors = exc_info.value.errors()
+        assert any("service_name" in str(e).lower() for e in errors)
+    
+    def test_systemd_with_service_name(self, tmp_path):
+        """Test that systemd with service_name works."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_systemd
+    type: systemd
+    service_name: nginx.service
+""")
+        # Should not raise
+        loader = ConfigLoader(config_file)
+        service = loader.get_service_config("test_systemd")
+        assert service.service_name == "nginx.service"
+    
+    def test_generic_type_no_special_requirements(self, tmp_path):
+        """Test that generic type has no special field requirements."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("""
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  backup:
+    root: /tmp/backups
+  notification:
+    type: email
+    settings: {}
+
+services:
+  - name: test_generic
+    type: generic
+""")
+        # Should not raise - generic type doesn't require special fields
+        loader = ConfigLoader(config_file)
+        service = loader.get_service_config("test_generic")
+        assert service.type == "generic"

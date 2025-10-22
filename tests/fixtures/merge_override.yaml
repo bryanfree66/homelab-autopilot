@@ -9,6 +9,8 @@ global:
     auto_update: true  # Override from false to true
 
 services:
+  # Docker container - requires container_name
   - name: additional_service
     type: docker
+    container_name: additional_container
     enabled: true

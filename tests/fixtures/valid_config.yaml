@@ -33,18 +33,21 @@ global:
       to_addr: admin@homelab.local
 
 services:
+  # LXC container - now requires vmid and node
   - name: plex
-    type: docker
+    type: lxc
+    vmid: 100
+    node: pve
     enabled: true
     backup: true
     update: true
     monitor: true
-    container_name: plex
     
+  # Systemd service - now requires service_name
   - name: nginx
     type: systemd
+    service_name: nginx.service
     enabled: true
     backup: true
     update: false
     monitor: true
-    service_name: nginx.service
