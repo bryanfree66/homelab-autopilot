@@ -1,0 +1,93 @@
+# Homelab Autopilot Configuration
+# Copy this file to homelab-autopilot.yaml and customize for your setup
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+global:
+  # Hypervisor platform: proxmox, esxi, libvirt, docker, unraid
+  hypervisor: proxmox
+  
+  # Hypervisor connection details
+  hypervisor_host: 10.0.20.34
+  hypervisor_user: root
+  
+  # Primary contact email for notifications
+  email: admin@example.com
+  
+  # Logging level: debug, info, warn, error
+  log_level: info
+
+# =============================================================================
+# NOTIFICATION SETTINGS
+# =============================================================================
+notifications:
+  email:
+    enabled: true
+    smtp_server: smtp.gmail.com
+    smtp_port: 587
+    smtp_user: homelab@example.com
+    smtp_password_command: "cat /etc/homelab-autopilot/secrets/smtp_password"
+    from: homelab@example.com
+    to: admin@example.com
+    cooldown: 3600
+
+# =============================================================================
+# BACKUP SETTINGS
+# =============================================================================
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retention_days: 30
+  
+  destinations:
+    - type: local
+      path: /mnt/backups/homelab
+      enabled: true
+    
+    - type: nfs
+      host: 10.0.20.50
+      path: /mnt/backups/homelab
+      mount_point: /mnt/nfs-backup
+      enabled: true
+
+# =============================================================================
+# MONITORING SETTINGS
+# =============================================================================
+monitoring:
+  enabled: true
+  check_interval: 300
+  alert_cooldown: 3600
+
+# =============================================================================
+# UPDATE SETTINGS
+# =============================================================================
+updates:
+  enabled: true
+  schedule: "0 3 * * 0"
+  snapshot_before_update: true
+  validate_after_update: true
+  auto_rollback: true
+  auto_reboot_host: false
+
+# =============================================================================
+# SERVICES CONFIGURATION
+# =============================================================================
+services:
+  - name: nextcloud
+    type: generic-container
+    platform: lxc
+    hypervisor_id: 105
+    ip_address: 10.0.20.54
+    
+    config_paths:
+      - /var/www/nextcloud/config/config.php
+    
+    auto_start: true
+    auto_update: true
+    
+    health_check:
+      enabled: true
+      method: http
+      url: http://10.0.20.54
+      expected_status: 200
