@@ -1,0 +1,400 @@
+# Homelab Autopilot Configuration - Proxmox Example
+# 
+# This example shows a typical Proxmox homelab setup with various
+# VMs and LXC containers. Copy this file to homelab-autopilot.yaml
+# and customize it for your environment.
+#
+# For more information, see: https://github.com/bryanfree66/homelab-autopilot
+
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+
+global:
+  # --------------------------------------------------------------------------
+  # Hypervisor Configuration
+  # --------------------------------------------------------------------------
+  hypervisor:
+    type: proxmox
+    host: pve.homelab.local  # Your Proxmox hostname or IP
+    username: root@pam       # Proxmox username (root@pam or user@pve)
+    
+    # Authentication Option 1: Password (simple but less secure)
+    password: your_secure_password_here
+    
+    # Authentication Option 2: API Token (recommended for production)
+    # To create: Datacenter > Permissions > API Tokens > Add
+    # token_id: automation@pve!autopilot
+    # token_secret: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    
+    verify_ssl: false  # Set to true if using valid SSL certificate
+  
+  # --------------------------------------------------------------------------
+  # Backup Configuration
+  # --------------------------------------------------------------------------
+  backup:
+    enabled: true
+    root: /mnt/backups/homelab-autopilot  # Where to store backups
+    retention_days: 30                     # How long to keep backups
+    compression: true                      # Compress backup files
+  
+  # --------------------------------------------------------------------------
+  # Update Configuration
+  # --------------------------------------------------------------------------
+  update:
+    enabled: true
+    auto_update: false  # Set to true to automatically apply updates
+    check_interval_hours: 24  # How often to check for updates
+  
+  # --------------------------------------------------------------------------
+  # Monitoring Configuration
+  # --------------------------------------------------------------------------
+  monitoring:
+    enabled: true
+    check_interval_minutes: 5  # How often to check service health
+  
+  # --------------------------------------------------------------------------
+  # Notification Configuration
+  # --------------------------------------------------------------------------
+  notification:
+    enabled: true
+    type: email  # Options: email, slack, discord, webhook
+    
+    # Email settings
+    settings:
+      smtp_host: smtp.gmail.com
+      smtp_port: 587
+      smtp_user: your-email@gmail.com
+      smtp_password: your-app-password  # Use app-specific password for Gmail
+      from_addr: homelab-autopilot@yourdomain.com
+      to_addr: admin@yourdomain.com
+      use_tls: true
+
+# ==============================================================================
+# SERVICES CONFIGURATION
+# ==============================================================================
+# 
+# Define all VMs, LXC containers, and services you want to manage.
+# For Proxmox VMs and LXC containers, you must specify:
+#   - vmid: The Proxmox VM/Container ID (found in Proxmox UI)
+#   - node: The Proxmox node name (e.g., 'pve', 'pve1', 'pve2')
+#
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Infrastructure Services
+  # ----------------------------------------------------------------------------
+  
+  # Proxmox Backup Server (LXC)
+  - name: proxmox-backup-server
+    type: lxc
+    vmid: 100
+    node: pve
+    enabled: true
+    backup: true   # Backup the container configuration
+    update: true   # Keep PBS updated
+    monitor: true  # Monitor health
+  
+  # Pi-hole DNS (LXC)
+  - name: pihole
+    type: lxc
+    vmid: 101
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Nginx Proxy Manager (LXC)
+  - name: nginx-proxy-manager
+    type: lxc
+    vmid: 102
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Storage & NAS
+  # ----------------------------------------------------------------------------
+  
+  # TrueNAS Scale (VM)
+  # Note: Auto-updates disabled - TrueNAS manages its own updates
+  - name: truenas
+    type: vm
+    vmid: 200
+    node: pve
+    enabled: true
+    backup: true
+    update: false  # TrueNAS handles its own updates
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Media Services
+  # ----------------------------------------------------------------------------
+  
+  # Plex Media Server (LXC)
+  - name: plex
+    type: lxc
+    vmid: 300
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Jellyfin (Alternative to Plex) (LXC)
+  - name: jellyfin
+    type: lxc
+    vmid: 301
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Tautulli - Plex Monitoring (LXC)
+  - name: tautulli
+    type: lxc
+    vmid: 302
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Download & Automation
+  # ----------------------------------------------------------------------------
+  
+  # qBittorrent (LXC)
+  - name: qbittorrent
+    type: lxc
+    vmid: 310
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Sonarr (TV Shows) (LXC)
+  - name: sonarr
+    type: lxc
+    vmid: 311
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Radarr (Movies) (LXC)
+  - name: radarr
+    type: lxc
+    vmid: 312
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Prowlarr (Indexer Manager) (LXC)
+  - name: prowlarr
+    type: lxc
+    vmid: 313
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Home Automation & IoT
+  # ----------------------------------------------------------------------------
+  
+  # Home Assistant (VM)
+  - name: home-assistant
+    type: vm
+    vmid: 400
+    node: pve
+    enabled: true
+    backup: true
+    update: true  # Can auto-update if you're comfortable
+    monitor: true
+  
+  # Node-RED (LXC)
+  - name: node-red
+    type: lxc
+    vmid: 401
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Mosquitto MQTT Broker (LXC)
+  - name: mosquitto
+    type: lxc
+    vmid: 402
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Productivity & Cloud Services
+  # ----------------------------------------------------------------------------
+  
+  # Nextcloud (LXC)
+  - name: nextcloud
+    type: lxc
+    vmid: 500
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Immich (Photo Management) (LXC)
+  - name: immich
+    type: lxc
+    vmid: 501
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Paperless-ngx (Document Management) (LXC)
+  - name: paperless-ngx
+    type: lxc
+    vmid: 502
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Monitoring & Management
+  # ----------------------------------------------------------------------------
+  
+  # Uptime Kuma (Status Monitoring) (LXC)
+  - name: uptime-kuma
+    type: lxc
+    vmid: 600
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Grafana (Metrics Visualization) (LXC)
+  - name: grafana
+    type: lxc
+    vmid: 601
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Prometheus (Metrics Collection) (LXC)
+  - name: prometheus
+    type: lxc
+    vmid: 602
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # ----------------------------------------------------------------------------
+  # Development & Testing
+  # ----------------------------------------------------------------------------
+  
+  # Docker Host (LXC with Docker installed)
+  - name: docker-host
+    type: lxc
+    vmid: 700
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+  
+  # Development VM (Ubuntu)
+  - name: dev-ubuntu
+    type: vm
+    vmid: 701
+    node: pve
+    enabled: false  # Only enable when actively using
+    backup: true
+    update: true
+    monitor: false
+  
+  # ----------------------------------------------------------------------------
+  # Network Services
+  # ----------------------------------------------------------------------------
+  
+  # pfSense/OPNsense Router (VM)
+  # Note: Auto-updates disabled - critical network component
+  - name: pfsense
+    type: vm
+    vmid: 800
+    node: pve
+    enabled: true
+    backup: true
+    update: false  # Manually update firewalls for safety
+    monitor: true
+  
+  # Wireguard VPN (LXC)
+  - name: wireguard
+    type: lxc
+    vmid: 801
+    node: pve
+    enabled: true
+    backup: true
+    update: true
+    monitor: true
+
+# ==============================================================================
+# NOTES
+# ==============================================================================
+#
+# Service Types:
+#   - lxc:     Proxmox LXC container (requires vmid, node)
+#   - vm:      Proxmox virtual machine (requires vmid, node)
+#   - docker:  Docker container (requires container_name)
+#   - systemd: Systemd service (requires service_name)
+#   - generic: Generic service (no special requirements)
+#
+# Field Descriptions:
+#   - name:    Friendly name for the service
+#   - type:    Service type (see above)
+#   - vmid:    Proxmox VM/LXC ID (100-999999)
+#   - node:    Proxmox node name
+#   - enabled: Whether to manage this service (true/false)
+#   - backup:  Include in backups (true/false)
+#   - update:  Include in updates (true/false)
+#   - monitor: Include in health monitoring (true/false)
+#
+# Finding Your VMIDs:
+#   1. Open Proxmox web interface
+#   2. Expand your node in the left sidebar
+#   3. VMIDs are shown next to each VM/container (e.g., "100 (plex)")
+#
+# Multi-Node Clusters:
+#   If you have multiple Proxmox nodes, specify the correct node name
+#   for each service. Node names are visible in the Proxmox UI.
+#
+# Best Practices:
+#   - Start with a few critical services and add more gradually
+#   - Disable auto_update initially and test manual updates first
+#   - Keep backups of critical data separate from homelab-autopilot backups
+#   - Test the configuration with: homelab-autopilot validate
+#   - Do a dry-run first: homelab-autopilot backup --dry-run
+#
+# ==============================================================================
