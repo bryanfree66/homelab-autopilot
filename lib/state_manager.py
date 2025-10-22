@@ -5,12 +5,12 @@ This module provides a simple key-value store for persisting application state
 such as last backup times, update times, and notification cooldowns.
 """
 
-import sqlite3
 import json
+import sqlite3
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
-from datetime import datetime
 
 
 class StateManager:

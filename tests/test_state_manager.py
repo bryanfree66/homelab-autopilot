@@ -9,11 +9,12 @@ Tests cover:
 - Edge cases and error handling
 """
 
-import pytest
-from pathlib import Path
-from datetime import datetime, timedelta
 import threading
 import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
 
 from lib.state_manager import StateManager
 

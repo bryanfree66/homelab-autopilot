@@ -7,14 +7,15 @@ and convenient dot-notation access to configuration values.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
 import yaml
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
+    ValidationError,
     field_validator,
     model_validator,
-    ConfigDict,
-    ValidationError,
 )
 
 

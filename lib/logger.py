@@ -9,9 +9,10 @@ This module provides a centralized logging configuration with support for:
 - Colorized console output
 """
 
+import sys
 from pathlib import Path
 from typing import Optional
-import sys
+
 from loguru import logger
 
 

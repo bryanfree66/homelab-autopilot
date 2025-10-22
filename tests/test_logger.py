@@ -10,13 +10,14 @@ Tests cover:
 - Structured logging context
 """
 
-import pytest
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
+
+import pytest
 from loguru import logger
 
-from lib.logger import setup_logger, get_logger, log_context, set_log_level
+from lib.logger import get_logger, log_context, set_log_level, setup_logger
 
 
 @pytest.fixture(autouse=True)
