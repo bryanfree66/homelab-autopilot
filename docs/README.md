@@ -1,195 +1,36 @@
-cat > README.md << 'EOF'
-# Homelab Autopilot
+# Homelab Autopilot Documentation
 
-**Safe, automated maintenance for your homelab infrastructure**
+Welcome to the Homelab Autopilot documentation!
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+## 📚 Documentation Index
 
-> ⚠️ **Alpha Software**: Currently in active development (Phase 1). Not yet ready for production use.
+### Getting Started
 
-## 🎯 What is Homelab Autopilot?
+- **[Installation Guide](installation.md)** - Coming soon
+- **[Quick Start](../README.md#quick-start)** - Get running in minutes
+- **[Configuration Guide](configuration.md)** - Coming soon
 
-Homelab Autopilot is an open-source automation framework that helps homelab enthusiasts safely maintain their infrastructure with automated backups, monitoring, and updates. Think of it as a safety net that catches problems before they become disasters.
+### Technical Documentation
 
-### Core Philosophy
+- **[Architecture Overview](architecture.md)** - System design and components
+- **[Plugin Development](plugin-development.md)** - Coming soon
 
-- **Safety First**: Always backup before making changes
-- **Fail Gracefully**: Automatic rollback on failures
-- **Keep It Simple**: Python-first, minimal dependencies
-- **Stay Informed**: Smart notifications only when needed
+### Reference
 
-## ✨ Features
+- **[Configuration Schema](config-reference.md)** - Coming soon
+- **[API Documentation](api-reference.md)** - Coming soon
 
-### Current (Phase 1 - In Development)
+## 🚀 Quick Links
 
-- ✅ **Configuration Management**
-  - YAML-based configuration with Pydantic validation
-  - Type-safe configuration models
-  - Dot notation access and config merging
-  - Comprehensive validation and error reporting
+**First time here?**
+1. Read the main [README](../README.md)
+2. Review the [Architecture](architecture.md)
+3. Check [CONTRIBUTING](../CONTRIBUTING.md) to help build this
 
-### Planned Features
-
-- 🔄 **Automated Backups** (Phase 2)
-  - VM/LXC backups via hypervisor APIs
-  - Service configuration backups
-  - Configurable retention policies
-  - Compression and deduplication
-
-- 🔄 **Safe Updates** (Phase 3)
-  - Pre-update backups
-  - Automated updates with rollback
-  - Service validation after updates
-  - Update scheduling and batching
-
-- 🔄 **Health Monitoring** (Phase 4)
-  - Service health checks
-  - Resource monitoring
-  - Automated recovery actions
-  - Historical metrics
-
-- 📬 **Smart Notifications** (Phase 2+)
-  - Email, Slack, Discord, webhooks
-  - Configurable alert levels
-  - Notification cooldowns
-  - Digest summaries
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.10 or higher
-- Linux-based system (Ubuntu 22.04+ recommended)
-- Hypervisor access (Proxmox VE supported, others coming soon)
-
-### Installation (Development)
-```bash
-# Clone the repository
-git clone https://github.com/bryanfree66/homelab-autopilot.git
-cd homelab-autopilot
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements-dev.txt
-
-# Install in editable mode
-pip install -e .
-
-# Run tests
-pytest tests/ -v --cov
-```
-
-### Configuration (Coming Soon)
-```bash
-# Copy example configuration
-cp config/homelab-autopilot.yaml.example config/homelab-autopilot.yaml
-
-# Edit configuration
-nano config/homelab-autopilot.yaml
-
-# Validate configuration (coming soon)
-homelab-autopilot validate
-```
-
-## 📖 Documentation
-
-- **[Architecture Overview](docs/architecture.md)** - System design and components
-- **[Contributing Guide](CONTRIBUTING.md)** - Development guidelines
-- **[Changelog](CHANGELOG.md)** - Version history
-
-More documentation coming as features are implemented!
-
-## 🗺️ Development Roadmap
-
-### Phase 0: Foundation ✅ COMPLETE
-- [x] Project structure
-- [x] Documentation framework
-- [x] Development guidelines
-- [x] Dependency management
-
-### Phase 1: Core Framework 🚧 IN PROGRESS (60% Complete)
-- [x] Configuration loader with Pydantic validation (✅ Complete)
-- [ ] Logger setup with loguru
-- [ ] State manager with SQLite
-- [ ] Plugin base classes
-- [ ] Utility functions
-- [ ] Test infrastructure
-
-### Phase 2: Backup System 📅 PLANNED
-- [ ] Backup engine
-- [ ] Proxmox hypervisor plugin
-- [ ] Generic service plugin
-- [ ] Email notification plugin
-
-### Phase 3: Update System 📅 PLANNED
-- [ ] Update engine with rollback
-- [ ] Service-specific update plugins
-- [ ] External validation
-
-### Phase 4: Monitoring System 📅 PLANNED
-- [ ] Health check engine
-- [ ] Multiple check types
-- [ ] Recovery actions
-
-### Phase 5: CLI & Scheduling 📅 PLANNED
-- [ ] Command-line interface
-- [ ] Cron/systemd integration
-- [ ] Interactive configuration
-
-### Phase 6: Advanced Features 📅 PLANNED
-- [ ] Web dashboard
-- [ ] Additional hypervisors (ESXi, KVM)
-- [ ] Cloud storage backends
-- [ ] Advanced notifications
-
-## 🛠️ Technology Stack
-
-- **Language**: Python 3.10+ (primary), Bash (system operations only)
-- **Configuration**: PyYAML + Pydantic v2 for validation
-- **State**: SQLite
-- **Logging**: loguru
-- **CLI**: click
-- **Testing**: pytest with pytest-cov and pytest-mock
-- **Code Quality**: black, pylint, mypy, isort
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-Key principles:
-- **Python-first**: Use Python where possible, bash where necessary
-- **Type hints**: Full type coverage with mypy
-- **Tests**: Comprehensive pytest coverage (80%+ target)
-- **Documentation**: Google-style docstrings
-
-## 📊 Project Status
-
-**Current Version**: 0.1.0-alpha  
-**Development Phase**: Phase 1 (Core Framework)  
-**Test Coverage**: 94% (config_loader.py)  
-**Production Ready**: No - Active development
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Inspired by the homelab community
-- Built with modern Python best practices
-- Designed for safety and reliability
-
-## 📬 Contact & Support
-
-- **Issues**: [GitHub Issues](https://github.com/bryanfree66/homelab-autopilot/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/bryanfree66/homelab-autopilot/discussions)
-- **Repository**: [github.com/bryanfree66/homelab-autopilot](https://github.com/bryanfree66/homelab-autopilot)
+**Having issues?**
+- Search [GitHub Issues](https://github.com/bryanfree66/homelab-autopilot/issues)
+- Ask in [GitHub Discussions](https://github.com/bryanfree66/homelab-autopilot/discussions)
 
 ---
 
-**⭐ Star this repo if you find it useful!**
+**Questions?** Open an issue or discussion on GitHub!

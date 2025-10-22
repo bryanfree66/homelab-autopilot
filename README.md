@@ -1,247 +1,194 @@
-# 🚀 Homelab Autopilot
+# Homelab Autopilot
 
 **Safe, automated maintenance for your homelab infrastructure**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)]()
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-> **Project Status**: 🚧 Active Development - Not yet ready for production use
+> ⚠️ **Alpha Software**: Currently in active development (Phase 1). Not yet ready for production use.
 
----
+## 🎯 What is Homelab Autopilot?
 
-## The Problem
+Homelab Autopilot is an open-source automation framework that helps homelab enthusiasts safely maintain their infrastructure with automated backups, monitoring, and updates. Think of it as a safety net that catches problems before they become disasters.
 
-You've built an amazing homelab. You're running Home Assistant, Nextcloud, Immich, and a dozen other services that you and your family rely on daily. But maintenance is a nightmare:
+### Core Philosophy
 
-- **Manual updates** are tedious and risky - what if something breaks?
-- **Backups** require remembering to run scripts, checking if they worked
-- **Monitoring** means SSH'ing in to check if services are still running
-- **Rollback** after a failed update? Good luck remembering what you changed
-- **Documentation?** What documentation? It's all tribal knowledge in your head
+- **Safety First**: Always backup before making changes
+- **Fail Gracefully**: Automatic rollback on failures
+- **Keep It Simple**: Python-first, minimal dependencies
+- **Stay Informed**: Smart notifications only when needed
 
-You know automation is the answer, but building it from scratch is daunting. Copy-pasting scripts from the internet feels sketchy. You want something **proven, safe, and actually designed for homelabs**.
+## ✨ Features
 
-## The Solution
+### Current (Phase 1 - In Development)
 
-**Homelab Autopilot** is an open-source automation framework that handles the boring, repetitive, and risky parts of homelab maintenance so you can focus on the fun stuff.
+- ✅ **Configuration Management**
+  - YAML-based configuration with Pydantic validation
+  - Type-safe configuration models
+  - Dot notation access and config merging
+  - Comprehensive validation and error reporting
 
-```yaml
-# homelab-autopilot.yaml
-services:
-  - name: nextcloud
-    type: generic-container
-    hypervisor_id: 105
-    config_paths:
-      - /var/www/nextcloud/config/config.php
-    auto_update: true
-    snapshot_before_update: true
-```
+### Planned Features
 
-That's it. Homelab Autopilot now:
-- ✅ **Backs up** your Nextcloud config daily (local + NFS + cloud)
-- ✅ **Monitors** if Nextcloud is responding
-- ✅ **Updates** Nextcloud safely with automatic snapshots
-- ✅ **Rolls back** if the update fails validation
-- ✅ **Alerts you** via email/Slack when something needs attention
+- 🔄 **Automated Backups** (Phase 2)
+  - VM/LXC backups via hypervisor APIs
+  - Service configuration backups
+  - Configurable retention policies
+  - Compression and deduplication
 
-## Key Features
+- 🔄 **Safe Updates** (Phase 3)
+  - Pre-update backups
+  - Automated updates with rollback
+  - Service validation after updates
+  - Update scheduling and batching
 
-### 🛡️ Safety First
+- 🔄 **Health Monitoring** (Phase 4)
+  - Service health checks
+  - Resource monitoring
+  - Automated recovery actions
+  - Historical metrics
 
-- **Automatic snapshots** before any changes (rollback if things go wrong)
-- **Validation testing** after updates (services must respond before considering update successful)
-- **Dry-run mode** for everything (see what would happen without actually doing it)
-- **Smart defaults** that never auto-reboot your host without asking
+- 📬 **Smart Notifications** (Phase 2+)
+  - Email, Slack, Discord, webhooks
+  - Configurable alert levels
+  - Notification cooldowns
+  - Digest summaries
 
-### 🔧 Flexible & Extensible
-
-- **Configuration-driven** - Edit YAML, not bash scripts
-- **Plugin architecture** - Easy to add support for new platforms and services
-- **Works with what you have** - Proxmox, Docker, LXC, VMs (more platforms coming)
-- **Modular design** - Use only the features you need
-
-### 📊 Comprehensive Automation
-
-- **Automated backups** with 3-2-1 strategy (local, NFS, cloud)
-- **Health monitoring** with configurable check intervals
-- **Safe updates** with validation and rollback
-- **Smart notifications** with cooldown to prevent spam
-- **External access validation** for reverse proxies and tunnels
-
-### 🌟 Built for the Community
-
-- **Open source** - MIT license, no vendor lock-in
-- **Well documented** - Clear guides for beginners and advanced users
-- **Community plugins** - Share your custom service integrations
-- **Production tested** - Born from real-world homelab automation running 24/7
-
-## Quick Start
-
-> **Note**: Installation instructions coming soon! The project is in early development.
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Linux-based hypervisor (Proxmox VE, ESXi, Unraid, or bare metal)
-- Python 3.10+
-- Bash 4.0+ (for system operations)
-- Root or sudo access
+- Python 3.10 or higher
+- Linux-based system (Ubuntu 22.04+ recommended)
+- Hypervisor access (Proxmox VE supported, others coming soon)
 
-### Installation (Coming Soon)
-
+### Installation (Development)
 ```bash
 # Clone the repository
 git clone https://github.com/bryanfree66/homelab-autopilot.git
 cd homelab-autopilot
 
-# Run the installer
-sudo ./install.sh
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Configure your services
-sudo cp /etc/homelab-autopilot/homelab-autopilot.yaml.example \
-        /etc/homelab-autopilot/homelab-autopilot.yaml
-sudo nano /etc/homelab-autopilot/homelab-autopilot.yaml
+# Install dependencies
+pip install -r requirements-dev.txt
 
-# Test your configuration
+# Install in editable mode
+pip install -e .
+
+# Run tests
+pytest tests/ -v --cov
+```
+
+### Configuration (Coming Soon)
+```bash
+# Copy example configuration
+cp config/homelab-autopilot.yaml.example config/homelab-autopilot.yaml
+
+# Edit configuration
+nano config/homelab-autopilot.yaml
+
+# Validate configuration (coming soon)
 homelab-autopilot validate
-
-# Run your first backup (dry-run)
-homelab-autopilot backup --all --dry-run
-
-# If everything looks good, enable automation
-homelab-autopilot setup-cron
 ```
 
-## Example Use Cases
+## 📖 Documentation
 
-### Daily Automated Backups
+- **[Architecture Overview](docs/architecture.md)** - System design and components
+- **[Contributing Guide](CONTRIBUTING.md)** - Development guidelines
+- **[Changelog](CHANGELOG.md)** - Version history
 
-```yaml
-backup:
-  schedule: "0 2 * * *"  # Daily at 2 AM
-  retention_days: 30
-  destinations:
-    - local: /mnt/backups
-    - nfs: 10.0.20.50:/mnt/backups
-    - cloud: backblaze-b2
-```
+More documentation coming as features are implemented!
 
-### Safe Weekend Updates
+## ��️ Development Roadmap
 
-```yaml
-updates:
-  schedule: "0 3 * * 0"  # Sunday at 3 AM
-  snapshot_before_update: true
-  validate_after_update: true
-  auto_rollback: true
-  notification_email: admin@example.com
-```
+### Phase 0: Foundation ✅ COMPLETE
+- [x] Project structure
+- [x] Documentation framework
+- [x] Development guidelines
+- [x] Dependency management
 
-### Continuous Health Monitoring
+### Phase 1: Core Framework �� IN PROGRESS (60% Complete)
+- [x] Configuration loader with Pydantic validation (✅ Complete)
+- [ ] Logger setup with loguru
+- [ ] State manager with SQLite
+- [ ] Plugin base classes
+- [ ] Utility functions
+- [ ] Test infrastructure
 
-```yaml
-monitoring:
-  check_interval: 300  # 5 minutes
-  alert_on: ["service_down", "backup_failed", "update_failed"]
-  alert_cooldown: 3600  # Don't spam - 1 alert per hour max
-```
-
-## Architecture
-
-Homelab Autopilot is built with a modular architecture:
-
-```
-Core Engines          Plugins              Configuration
-├─ Backup Engine  →  ├─ Proxmox       →   homelab-autopilot.yaml
-├─ Update Engine  →  ├─ ESXi          →   (YAML-driven)
-├─ Monitor Engine →  ├─ Docker        →
-└─ Notify Engine  →  └─ Custom...     →
-```
-
-- **Core Engines** provide universal logic (backup, update, monitor, notify)
-- **Plugins** extend functionality for specific platforms and services
-- **Configuration** drives everything - no code changes needed
-
-See [docs/architecture.md](docs/architecture.md) for detailed design.
-
-## Current Status & Roadmap
-
-### ✅ Completed
-
-- [x] Project vision and architecture defined
-- [x] Repository structure created
-- [x] Initial documentation
-
-### 🚧 In Progress (Phase 0-1)
-
-- [ ] Core configuration loader
-- [ ] Backup engine (generic)
+### Phase 2: Backup System 📅 PLANNED
+- [ ] Backup engine
 - [ ] Proxmox hypervisor plugin
+- [ ] Generic service plugin
 - [ ] Email notification plugin
-- [ ] Installation script
 
-### 📋 Planned (Phase 2-3)
-
+### Phase 3: Update System 📅 PLANNED
 - [ ] Update engine with rollback
-- [ ] Monitoring engine
-- [ ] Service plugins (Caddy, Nginx Proxy Manager, Docker Compose)
-- [ ] Web dashboard (stretch goal)
+- [ ] Service-specific update plugins
+- [ ] External validation
 
-### 🔮 Future Ideas
+### Phase 4: Monitoring System 📅 PLANNED
+- [ ] Health check engine
+- [ ] Multiple check types
+- [ ] Recovery actions
 
-- [ ] ESXi and Unraid support
-- [ ] Slack/Discord notifications
-- [ ] Prometheus metrics integration
-- [ ] Security scanning integration
-- [ ] Mobile app for notifications
+### Phase 5: CLI & Scheduling 📅 PLANNED
+- [ ] Command-line interface
+- [ ] Cron/systemd integration
+- [ ] Interactive configuration
 
-## Contributing
+### Phase 6: Advanced Features 📅 PLANNED
+- [ ] Web dashboard
+- [ ] Additional hypervisors (ESXi, KVM)
+- [ ] Cloud storage backends
+- [ ] Advanced notifications
 
-We welcome contributions! Whether you're:
+## 🛠️ Technology Stack
 
-- 🐛 Reporting bugs
-- 💡 Suggesting features
-- 📝 Improving documentation
-- 🔌 Writing plugins for new platforms/services
-- 🧪 Testing and providing feedback
+- **Language**: Python 3.10+ (primary), Bash (system operations only)
+- **Configuration**: PyYAML + Pydantic v2 for validation
+- **State**: SQLite
+- **Logging**: loguru
+- **CLI**: click
+- **Testing**: pytest with pytest-cov and pytest-mock
+- **Code Quality**: black, pylint, mypy, isort
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+## 🤝 Contributing
 
-### Ways to Help Right Now
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-Even though the project is early, you can help by:
+Key principles:
+- **Python-first**: Use Python where possible, bash where necessary
+- **Type hints**: Full type coverage with mypy
+- **Tests**: Comprehensive pytest coverage (80%+ target)
+- **Documentation**: Google-style docstrings
 
-1. **⭐ Star the repo** - Shows interest and helps others discover it
-2. **💬 Join discussions** - Share your homelab setup and automation needs
-3. **📣 Spread the word** - Tell other homelab enthusiasts
-4. **🧪 Early testing** - Try it out and report issues (when alpha is ready)
+## 📊 Project Status
 
-## Philosophy
+**Current Version**: 0.1.0-alpha  
+**Development Phase**: Phase 1 (Core Framework)  
+**Test Coverage**: 94% (config_loader.py)  
+**Production Ready**: No - Active development
 
-Homelab Autopilot is built on these principles:
+## �� License
 
-1. **Safety First** - Never break your homelab. Always have a way back.
-2. **Configuration Over Code** - Users edit YAML, not bash scripts.
-3. **Sensible Defaults** - Works out of the box, customize if needed.
-4. **Modular Design** - Use what you need, skip what you don't.
-5. **Community Driven** - Built by homelab enthusiasts, for homelab enthusiasts.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Inspiration
+## 🙏 Acknowledgments
 
-This project was born from a production homelab automation system that's been running reliably for over a year. The goal is to extract those proven patterns and make them accessible to everyone in the homelab community.
+- Inspired by the homelab community
+- Built with modern Python best practices
+- Designed for safety and reliability
 
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Support & Community
+## �� Contact & Support
 
 - **Issues**: [GitHub Issues](https://github.com/bryanfree66/homelab-autopilot/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/bryanfree66/homelab-autopilot/discussions)
-- **Reddit**: r/homelab, r/selfhosted
+- **Repository**: [github.com/bryanfree66/homelab-autopilot](https://github.com/bryanfree66/homelab-autopilot)
 
 ---
 
-**Built with ❤️ by the homelab community**
-
-*Homelab Autopilot - Because your infrastructure should maintain itself*
+**⭐ Star this repo if you find it useful!**
