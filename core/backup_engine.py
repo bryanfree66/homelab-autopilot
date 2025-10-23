@@ -56,6 +56,7 @@ class BackupEngine:
         self.dry_run = dry_run
         self.logger = get_logger()
         self._plugin_cache: Dict[str, Union[HypervisorPlugin, ServicePlugin]] = {}
+        self._backup_config_cache: Optional[Dict[str, Any]] = None
 
         if self.dry_run:
             self.logger.info("BackupEngine initialized in DRY RUN mode")
@@ -399,11 +400,73 @@ class BackupEngine:
         """
         Get backup configuration from global config.
 
+        Returns cached result on subsequent calls since config doesn't
+        change during runtime.
+
         Returns:
             Dict containing backup settings (root, retention_days, etc.)
+            Converts Pydantic models to dicts for easier access.
 
         Example:
             >>> backup_config = engine._get_backup_config()
             >>> print(backup_config['root'])
+            >>> print(backup_config.get('proxmox_backup_server'))
         """
-        raise NotImplementedError
+        # Return cached version if available
+        if self._backup_config_cache is not None:
+            return self._backup_config_cache
+
+        # Get BackupConfig Pydantic model from ConfigLoader
+        backup_config = self.config.get("global.backup")
+
+        if backup_config is None:
+            # This shouldn't happen if config validation passed, but handle gracefully
+            self.logger.warning("No backup configuration found, using defaults")
+            self._backup_config_cache = {
+                "enabled": True,
+                "root": Path("/var/lib/homelab-autopilot/backups"),
+                "retention_days": 30,
+                "compression": True,
+                "proxmox_backup_server": None,
+                "direct_storage": None,
+            }
+            return self._backup_config_cache
+
+        # Convert Pydantic model to dict
+        config_dict = {
+            "enabled": backup_config.enabled,
+            "root": backup_config.root,
+            "retention_days": backup_config.retention_days,
+            "compression": backup_config.compression,
+        }
+
+        # Handle optional PBS config (also a Pydantic model)
+        if backup_config.proxmox_backup_server is not None:
+            pbs = backup_config.proxmox_backup_server
+            config_dict["proxmox_backup_server"] = {
+                "enabled": pbs.enabled,
+                "server": pbs.server,
+                "port": pbs.port,
+                "datastore": pbs.datastore,
+                "username": pbs.username,
+                "password": pbs.password,
+                "password_command": pbs.password_command,
+                "verify_ssl": pbs.verify_ssl,
+            }
+        else:
+            config_dict["proxmox_backup_server"] = None
+
+        # Handle optional direct storage config (also a Pydantic model)
+        if backup_config.direct_storage is not None:
+            ds = backup_config.direct_storage
+            config_dict["direct_storage"] = {
+                "enabled": ds.enabled,
+                "path": ds.path,
+                "format": ds.format,
+            }
+        else:
+            config_dict["direct_storage"] = None
+
+        # Cache and return
+        self._backup_config_cache = config_dict
+        return config_dict
