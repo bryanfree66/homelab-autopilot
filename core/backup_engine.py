@@ -353,11 +353,31 @@ class BackupEngine:
         Returns:
             Path to service backup directory
 
+        Raises:
+            OSError: If directory cannot be created
+
         Example:
             >>> backup_dir = engine._get_backup_directory("nextcloud")
             >>> print(backup_dir)  # /mnt/backups/homelab/nextcloud/
         """
-        raise NotImplementedError
+        # Get backup root from config
+        backup_config = self._get_backup_config()
+        backup_root = backup_config["root"]
+
+        # Create service-specific subdirectory
+        backup_dir = backup_root / service_name
+
+        # Create directory if it doesn't exist (mkdir -p behavior)
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.debug(f"Backup directory ready: {backup_dir}")
+        except OSError as e:
+            self.logger.error(
+                f"Failed to create backup directory {backup_dir}: {e}"
+            )
+            raise
+
+        return backup_dir
 
     def _generate_backup_filename(
         self, service_name: str, service_type: str, extension: str = "tar.gz"
@@ -366,6 +386,7 @@ class BackupEngine:
         Generate backup filename with timestamp.
 
         Format: {service_name}_{timestamp}_{type}.{extension}
+        Timestamp format: YYYYMMDD_HHMMSS (sortable, filesystem-safe)
 
         Args:
             service_name: Service name
@@ -379,7 +400,16 @@ class BackupEngine:
             >>> filename = engine._generate_backup_filename("nextcloud", "vm")
             >>> print(filename)  # nextcloud_20250124_120000_vm.tar.gz
         """
-        raise NotImplementedError
+        # Generate timestamp in sortable format: YYYYMMDD_HHMMSS
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Sanitize service name (replace spaces/special chars with underscores)
+        safe_service_name = service_name.replace(" ", "_").replace("/", "_")
+
+        # Build filename
+        filename = f"{safe_service_name}_{timestamp}_{service_type}.{extension}"
+
+        return filename
 
     def _send_backup_summary(self, results: Dict[str, bool]) -> None:
         """
