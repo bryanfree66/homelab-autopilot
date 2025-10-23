@@ -261,13 +261,39 @@ class BackupEngine:
             service_name: Service name
 
         Returns:
-            List of backup file paths, sorted by modification time
+            List of backup file paths, sorted by modification time (oldest first)
 
         Example:
             >>> backups = engine._get_backup_files("nextcloud")
             >>> print(f"Found {len(backups)} backups")
         """
-        raise NotImplementedError
+        # Get backup directory
+        backup_dir = self._get_backup_directory(service_name)
+
+        # Check if directory exists (should always exist after _get_backup_directory)
+        if not backup_dir.exists():
+            self.logger.warning(
+                f"Backup directory does not exist: {backup_dir}"
+            )
+            return []
+
+        # Get all files (not directories) in backup directory
+        try:
+            files = [f for f in backup_dir.iterdir() if f.is_file()]
+        except OSError as e:
+            self.logger.error(
+                f"Error reading backup directory {backup_dir}: {e}"
+            )
+            return []
+
+        # Sort by modification time (oldest first)
+        files.sort(key=lambda f: f.stat().st_mtime)
+
+        self.logger.debug(
+            f"Found {len(files)} backup files for {service_name}"
+        )
+
+        return files
 
     # ========================================================================
     # State Tracking
