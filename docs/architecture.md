@@ -202,6 +202,137 @@ class BackupEngine:
 5. Send notification
 ```
 
+### Backup Strategy Design (Phase 2)
+
+**Philosophy**: Integrate with existing backup tools rather than replace them. Support multiple backup strategies to accommodate different homelab configurations.
+
+#### Supported Backup Methods
+
+Homelab Autopilot supports flexible backup strategies based on user configuration:
+
+**1. Proxmox Backup Server (PBS) Integration**
+- For users with PBS configured (VM/standalone)
+- Uses Proxmox API to trigger backups to PBS datastore
+- Leverages PBS's deduplication, encryption, and verification features
+- Recommended for production homelabs
+
+**2. Direct Storage Backup**
+- Uses Proxmox's native `vzdump` to backup directly to NFS/local storage
+- Simple, no additional services required
+- Good for smaller setups or testing
+
+**3. Hybrid Approach**
+- Host configs → Direct storage (fast, small files)
+- VMs/LXCs → PBS (advanced features)
+- Common in production homelabs
+
+#### Configuration Schema
+
+```yaml
+global:
+  backup:
+    enabled: true
+    root: /mnt/backups/homelab  # Fallback/config backup location
+    retention_days: 30
+    compression: true
+    
+    # Optional: Proxmox Backup Server
+    proxmox_backup_server:
+      enabled: true
+      server: 192.168.1.100
+      port: 8007
+      datastore: proxmox-backups
+      username: root@pam
+      password_command: "cat /etc/homelab-autopilot/secrets/pbs_password"
+      verify_ssl: true
+      
+    # Optional: Direct storage
+    direct_storage:
+      enabled: true
+      path: /mnt/nfs/backups
+      format: vma  # vma (default) or tar
+
+services:
+  - name: nextcloud
+    type: vm
+    vmid: 200
+    node: pve1
+    backup: true  # Respects global backup strategy
+```
+
+#### Backup Decision Logic
+
+```
+For VM/LXC services:
+  IF proxmox_backup_server.enabled == true:
+    → Trigger vzdump backup to PBS datastore
+  ELIF direct_storage.enabled == true:
+    → Trigger vzdump backup to direct_storage.path
+  ELSE:
+    → Trigger vzdump backup to global.backup.root
+
+For Docker/Systemd/Generic services:
+  → Backup configs/volumes to global.backup.root
+  
+For Proxmox host configs:
+  → Always backup to global.backup.root
+  → Include: /etc/pve/, /var/lib/pve-cluster/config.db, 
+             /etc/network/interfaces, /etc/hosts, /etc/hostname
+```
+
+#### Implementation Details
+
+**ProxmoxPlugin Backup Methods:**
+1. `_backup_to_pbs()` - Uses Proxmox API: `nodes(node).vzdump.create(storage='pbs-id')`
+2. `_backup_to_storage()` - Uses Proxmox API: `nodes(node).vzdump.create(dumpdir='/path')`
+3. Plugin determines method based on global configuration
+
+**Retention Policy:**
+- PBS-managed backups: Use PBS's native retention settings
+- Direct storage backups: BackupEngine manages retention via `apply_retention_policy()`
+- Host config backups: Always managed by BackupEngine
+
+**Verification:**
+- PBS backups: PBS handles verification internally
+- Direct storage backups: BackupEngine verifies file existence, size, and optional extraction test
+
+#### Proxmox Host Backup
+
+Proxmox host configuration backup is supported via a special `host` service type:
+
+```yaml
+services:
+  - name: proxmox-host-config
+    type: host
+    enabled: true
+    backup: true
+    backup_paths:  # Optional: customize what to backup
+      - /etc/pve/
+      - /var/lib/pve-cluster/config.db
+      - /etc/network/interfaces
+      - /etc/hosts
+      - /etc/hostname
+      - /root/custom-scripts/  # User's custom additions
+```
+
+**What Gets Backed Up:**
+- **Default paths**: Essential Proxmox configs for quick rebuild after reinstall
+- **Custom paths**: User can add additional directories (scripts, configs)
+- **Format**: Compressed tar archive
+- **Naming**: `proxmox-host-config_YYYYMMDD_HHMMSS.tar.gz`
+
+**What Does NOT Get Backed Up:**
+- VM/LXC disk images (use VM/LXC backups instead)
+- System disk block-level backup (use Clonezilla/dd if needed)
+- PBS datastore contents (handle separately)
+
+**Restore Process:**
+1. Fresh Proxmox install
+2. Extract config backup
+3. Restore configs to original locations
+4. Reboot
+5. VMs/LXCs appear in GUI, restore their data from backups
+
 ### 3. Update Engine (`core/update_engine.py`)
 
 **Purpose**: Safely update services with automatic rollback
