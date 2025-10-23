@@ -1,0 +1,26 @@
+# Invalid direct storage configuration for testing validation
+
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  
+  backup:
+    root: /tmp/backups
+    direct_storage:
+      enabled: true
+      path: relative/path  # Invalid - must be absolute
+      format: invalid_format  # Invalid format
+  
+  notification:
+    type: email
+    settings:
+      smtp_host: localhost
+
+services:
+  - name: test
+    type: lxc
+    vmid: 100
+    node: pve
+    enabled: true

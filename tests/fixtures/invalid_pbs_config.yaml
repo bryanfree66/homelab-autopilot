@@ -1,0 +1,29 @@
+# Invalid PBS configuration for testing validation
+
+global:
+  hypervisor:
+    type: proxmox
+    host: localhost
+    username: admin
+  
+  backup:
+    root: /tmp/backups
+    proxmox_backup_server:
+      enabled: true
+      server: 192.168.1.100
+      port: 99999  # Invalid port number (too high)
+      datastore: test
+      username: root@pam
+      # Missing both password and password_command - should fail
+  
+  notification:
+    type: email
+    settings:
+      smtp_host: localhost
+
+services:
+  - name: test
+    type: lxc
+    vmid: 100
+    node: pve
+    enabled: true

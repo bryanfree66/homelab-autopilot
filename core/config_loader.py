@@ -42,6 +42,67 @@ class HypervisorConfig(BaseModel):
         return v.lower()
 
 
+class ProxmoxBackupServerConfig(BaseModel):
+    """Proxmox Backup Server configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(False, description="Enable PBS integration")
+    server: str = Field(..., description="PBS server hostname or IP")
+    port: int = Field(8007, description="PBS API port")
+    datastore: str = Field(..., description="PBS datastore name")
+    username: str = Field(..., description="PBS username (e.g., root@pam)")
+    password: Optional[str] = Field(None, description="PBS password")
+    password_command: Optional[str] = Field(
+        None, description="Command to retrieve password"
+    )
+    verify_ssl: bool = Field(True, description="Verify SSL certificates")
+
+    @field_validator("port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        """Validate port is in valid range."""
+        if v < 1 or v > 65535:
+            raise ValueError("Port must be between 1 and 65535")
+        return v
+
+    @model_validator(mode="after")
+    def validate_auth(self) -> "ProxmoxBackupServerConfig":
+        """Ensure either password or password_command is provided."""
+        if self.enabled and not self.password and not self.password_command:
+            raise ValueError(
+                "Either 'password' or 'password_command' must be provided for PBS"
+            )
+        return self
+
+
+class DirectStorageConfig(BaseModel):
+    """Direct storage backup configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(False, description="Enable direct storage backups")
+    path: Path = Field(..., description="Directory path for backups")
+    format: str = Field("vma", description="Backup format (vma or tar)")
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, v: Path) -> Path:
+        """Ensure path is absolute."""
+        if not v.is_absolute():
+            raise ValueError("Direct storage path must be absolute")
+        return v
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, v: str) -> str:
+        """Validate backup format."""
+        allowed_formats = ["vma", "tar"]
+        if v.lower() not in allowed_formats:
+            raise ValueError(f"Backup format must be one of {allowed_formats}")
+        return v.lower()
+
+
 class BackupConfig(BaseModel):
     """Backup configuration."""
 
@@ -51,6 +112,12 @@ class BackupConfig(BaseModel):
     root: Path = Field(..., description="Root directory for backups")
     retention_days: int = Field(30, description="Days to retain backups")
     compression: bool = Field(True, description="Enable compression")
+    proxmox_backup_server: Optional[ProxmoxBackupServerConfig] = Field(
+        None, description="Proxmox Backup Server configuration"
+    )
+    direct_storage: Optional[DirectStorageConfig] = Field(
+        None, description="Direct storage backup configuration"
+    )
 
     @field_validator("retention_days")
     @classmethod
@@ -167,11 +234,16 @@ class ServiceConfig(BaseModel):
         None, description="Systemd service name (e.g., nginx.service)"
     )
 
+    # Host-specific fields (for Proxmox host config backups)
+    backup_paths: Optional[List[str]] = Field(
+        None, description="Additional paths to backup for host type"
+    )
+
     @field_validator("type")
     @classmethod
     def validate_type(cls, v: str) -> str:
         """Validate service type."""
-        allowed_types = ["docker", "systemd", "vm", "lxc", "generic"]
+        allowed_types = ["docker", "systemd", "vm", "lxc", "generic", "host"]
         if v.lower() not in allowed_types:
             raise ValueError(f"Service type must be one of {allowed_types}")
         return v.lower()

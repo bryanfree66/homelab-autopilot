@@ -1,4 +1,4 @@
-# Valid test configuration for Homelab Autopilot (Phase 2)
+# Valid config with both PBS and direct storage (PBS takes precedence for VMs/LXCs)
 
 global:
   hypervisor:
@@ -13,6 +13,18 @@ global:
     root: /mnt/backups
     retention_days: 30
     compression: true
+    proxmox_backup_server:
+      enabled: true
+      server: 192.168.1.100
+      port: 8007
+      datastore: pbs-datastore
+      username: root@pam
+      password: pbs_password
+      verify_ssl: false
+    direct_storage:
+      enabled: true
+      path: /mnt/nfs/backups
+      format: vma
   
   update:
     enabled: true
@@ -33,7 +45,6 @@ global:
       to_addr: admin@homelab.local
 
 services:
-  # LXC container - requires vmid and node
   - name: plex
     type: lxc
     vmid: 100
@@ -41,23 +52,4 @@ services:
     enabled: true
     backup: true
     update: true
-    monitor: true
-    
-  # VM - requires vmid and node
-  - name: nextcloud
-    type: vm
-    vmid: 200
-    node: pve
-    enabled: true
-    backup: true
-    update: true
-    monitor: true
-    
-  # Systemd service - requires service_name
-  - name: nginx
-    type: systemd
-    service_name: nginx.service
-    enabled: true
-    backup: true
-    update: false
     monitor: true

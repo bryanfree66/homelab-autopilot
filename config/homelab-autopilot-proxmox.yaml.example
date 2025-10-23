@@ -34,9 +34,30 @@ global:
   # --------------------------------------------------------------------------
   backup:
     enabled: true
-    root: /mnt/backups/homelab-autopilot  # Where to store backups
+    root: /mnt/backups/homelab-autopilot  # Where to store config/fallback backups
     retention_days: 30                     # How long to keep backups
     compression: true                      # Compress backup files
+    
+    # Option 1: Proxmox Backup Server (PBS) - Recommended for production
+    # Uncomment to enable PBS integration for VM/LXC backups
+    # proxmox_backup_server:
+    #   enabled: true
+    #   server: 192.168.1.100         # PBS server IP or hostname
+    #   port: 8007                     # PBS API port (default: 8007)
+    #   datastore: proxmox-backups     # PBS datastore name
+    #   username: root@pam             # PBS username
+    #   password_command: "cat /etc/homelab-autopilot/secrets/pbs_password"
+    #   verify_ssl: true               # Set false for self-signed certs
+    
+    # Option 2: Direct Storage - Simple backup to NFS/local directory
+    # Uncomment to enable direct vzdump backups for VM/LXC
+    # direct_storage:
+    #   enabled: true
+    #   path: /mnt/nfs/backups        # NFS mount or local directory
+    #   format: vma                    # vma (default) or tar
+    
+    # Note: If neither PBS nor direct_storage is enabled, VM/LXC backups
+    # will use the 'root' path above as a fallback.
   
   # --------------------------------------------------------------------------
   # Update Configuration
@@ -82,6 +103,27 @@ global:
 # ==============================================================================
 
 services:
+  # ----------------------------------------------------------------------------
+  # Proxmox Host Configuration Backup
+  # ----------------------------------------------------------------------------
+  
+  # Special service type for backing up Proxmox host configuration files
+  # This backs up essential configs needed to rebuild your Proxmox host
+  - name: proxmox-host-config
+    type: host
+    enabled: true
+    backup: true
+    update: false  # Not applicable for host type
+    monitor: false # Not applicable for host type
+    backup_paths:  # Optional: add custom paths beyond defaults
+      - /root/scripts/      # Your custom scripts
+      # Default paths are automatically included:
+      # - /etc/pve/
+      # - /var/lib/pve-cluster/config.db
+      # - /etc/network/interfaces
+      # - /etc/hosts
+      # - /etc/hostname
+  
   # ----------------------------------------------------------------------------
   # Infrastructure Services
   # ----------------------------------------------------------------------------

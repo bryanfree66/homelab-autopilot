@@ -1,4 +1,4 @@
-# Valid test configuration for Homelab Autopilot (Phase 2)
+# Valid test configuration with direct storage for Homelab Autopilot
 
 global:
   hypervisor:
@@ -13,6 +13,10 @@ global:
     root: /mnt/backups
     retention_days: 30
     compression: true
+    direct_storage:
+      enabled: true
+      path: /mnt/nfs/backups
+      format: vma
   
   update:
     enabled: true
@@ -33,7 +37,7 @@ global:
       to_addr: admin@homelab.local
 
 services:
-  # LXC container - requires vmid and node
+  # LXC container
   - name: plex
     type: lxc
     vmid: 100
@@ -43,7 +47,7 @@ services:
     update: true
     monitor: true
     
-  # VM - requires vmid and node
+  # VM
   - name: nextcloud
     type: vm
     vmid: 200
@@ -51,13 +55,4 @@ services:
     enabled: true
     backup: true
     update: true
-    monitor: true
-    
-  # Systemd service - requires service_name
-  - name: nginx
-    type: systemd
-    service_name: nginx.service
-    enabled: true
-    backup: true
-    update: false
     monitor: true
