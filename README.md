@@ -39,7 +39,7 @@ Homelab Autopilot is an open-source automation framework that **unifies backup m
 
 ## ✨ Features
 
-### Current (Phase 1 - In Development)
+### Current (Phase 2 - In Development)
 
 - ✅ **Configuration Management**
   - YAML-based configuration with Pydantic validation
