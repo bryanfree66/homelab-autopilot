@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from core.config_loader import (
     BackupConfig,
+    ConfigError,
     ConfigLoader,
     DirectStorageConfig,
     HomeLabConfig,
@@ -117,11 +118,11 @@ class TestValidation:
 
     def test_invalid_config_raises_validation_error(self, invalid_config_path):
         """Test that invalid config raises ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(invalid_config_path)
 
         # Check that multiple errors are aggregated
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert len(errors) > 0
 
     def test_invalid_hypervisor_type(self, tmp_path):
@@ -141,10 +142,10 @@ global:
     settings: {}
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("hypervisor" in str(e) for e in errors)
 
     def test_invalid_service_type(self, tmp_path):
@@ -168,10 +169,10 @@ services:
     type: invalid_type
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("service" in str(e).lower() for e in errors)
 
     def test_invalid_retention_days(self, tmp_path):
@@ -192,10 +193,10 @@ global:
     settings: {}
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("retention" in str(e).lower() for e in errors)
 
     def test_relative_backup_path(self, tmp_path):
@@ -215,10 +216,10 @@ global:
     settings: {}
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("absolute" in str(e).lower() for e in errors)
 
     def test_validate_method(self, valid_loader):
@@ -429,7 +430,7 @@ global:
         config_file.write_text("")
 
         # Empty file should fail validation (missing required fields)
-        with pytest.raises(ValidationError):
+        with pytest.raises(ConfigError):
             ConfigLoader(config_file)
 
     def test_non_dict_yaml(self, tmp_path):
@@ -456,7 +457,7 @@ class TestEdgeCases:
         """Test that get() returns default when validation failed."""
         # We can't create a loader with invalid config due to validation
         # So we test the behavior through the normal path
-        with pytest.raises(ValidationError):
+        with pytest.raises(ConfigError):
             ConfigLoader(invalid_config_path)
 
     def test_empty_services_list(self, minimal_config_path):
@@ -540,10 +541,10 @@ global:
 """
         )
 
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any(
             "extra" in str(e).lower() or "unknown_field" in str(e) for e in errors
         )
@@ -608,10 +609,10 @@ services:
     node: pve
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("vmid" in str(e).lower() for e in errors)
 
     def test_vm_requires_node(self, tmp_path):
@@ -636,10 +637,10 @@ services:
     vmid: 100
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("node" in str(e).lower() for e in errors)
 
     def test_lxc_requires_vmid_and_node(self, tmp_path):
@@ -663,10 +664,10 @@ services:
     type: lxc
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("vmid" in str(e).lower() for e in errors)
 
     def test_vmid_range_validation(self, tmp_path):
@@ -693,10 +694,10 @@ services:
     node: pve
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("100" in str(e) and "999999" in str(e) for e in errors)
 
     def test_vmid_valid_range(self, tmp_path):
@@ -749,10 +750,10 @@ services:
     type: docker
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("container_name" in str(e).lower() for e in errors)
 
     def test_docker_with_container_name(self, tmp_path):
@@ -803,10 +804,10 @@ services:
     type: systemd
 """
         )
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
 
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("service_name" in str(e).lower() for e in errors)
 
     def test_systemd_with_service_name(self, tmp_path):
@@ -939,15 +940,15 @@ global:
 """
         )
         
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
         
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("port" in str(e).lower() for e in errors)
 
     def test_pbs_requires_auth(self, invalid_pbs_config_path):
         """Test PBS requires password or password_command."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ConfigError):
             ConfigLoader(invalid_pbs_config_path)
 
     def test_pbs_with_password_command(self, tmp_path):
@@ -1034,10 +1035,10 @@ class TestDirectStorageConfig:
 
     def test_direct_storage_path_must_be_absolute(self, invalid_direct_config_path):
         """Test direct storage path must be absolute."""
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(invalid_direct_config_path)
         
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("absolute" in str(e).lower() for e in errors)
 
     def test_direct_storage_invalid_format(self, tmp_path):
@@ -1062,10 +1063,10 @@ global:
 """
         )
         
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
         
-        errors = exc_info.value.errors()
+        errors = exc_info.value.__cause__.errors()
         assert any("format" in str(e).lower() for e in errors)
 
     def test_direct_storage_tar_format(self, tmp_path):

@@ -8,9 +8,19 @@ such as last backup times, update times, and notification cooldowns.
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+class StateError(Exception):
+    """
+    Exception raised for state management errors.
+
+    Used for database connection failures, integrity issues, and other
+    state-related problems that should fail fast.
+    """
 
 
 class StateManager:
@@ -30,7 +40,7 @@ class StateManager:
         ...     print("Already checked")
     """
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, timeout: float = 10.0):
         """
         Initialize state manager with database path.
 
@@ -39,38 +49,98 @@ class StateManager:
 
         Args:
             db_path: Path to SQLite database file
+            timeout: Database connection timeout in seconds (default: 10.0)
 
         Raises:
-            OSError: If database directory cannot be created
-            sqlite3.Error: If database initialization fails
+            StateError: If database directory cannot be created or initialization fails
         """
         self.db_path = db_path
+        self.timeout = timeout
         self._lock = threading.Lock()
 
         # Ensure database directory exists
-        db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise StateError(
+                f"Failed to create database directory {db_path.parent}: {e}"
+            ) from e
 
         # Initialize database
         self._init_database()
 
-    def _init_database(self) -> None:
-        """Create database schema if it doesn't exist."""
-        with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
+    @contextmanager
+    def _get_connection(self):
+        """
+        Get database connection with timeout as context manager.
+
+        Yields:
+            sqlite3.Connection: Database connection
+
+        Raises:
+            StateError: If connection fails
+        """
+        try:
+            conn = sqlite3.connect(str(self.db_path), timeout=self.timeout)
             try:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS state (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL,
-                        type TEXT NOT NULL,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """
-                )
-                conn.commit()
+                yield conn
             finally:
                 conn.close()
+        except sqlite3.Error as e:
+            raise StateError(
+                f"Database connection failed for {self.db_path}: {e}"
+            ) from e
+
+    def _init_database(self) -> None:
+        """
+        Create database schema if it doesn't exist.
+
+        Raises:
+            StateError: If database initialization fails
+        """
+        with self._lock:
+            try:
+                with self._get_connection() as conn:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS state (
+                            key TEXT PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            type TEXT NOT NULL,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """
+                    )
+                    conn.commit()
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(f"Failed to initialize database: {e}") from e
+
+    def check_integrity(self) -> bool:
+        """
+        Check database integrity.
+
+        Returns:
+            True if integrity check passes
+
+        Raises:
+            StateError: If integrity check fails
+        """
+        with self._lock:
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.execute("PRAGMA integrity_check")
+                    result = cursor.fetchone()
+                    if result and result[0] != "ok":
+                        raise StateError(
+                            f"Database integrity check failed: {result[0]}"
+                        )
+                    return True
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(f"Integrity check failed: {e}") from e
 
     def _serialize_value(self, value: Any) -> tuple[str, str]:
         """
@@ -145,6 +215,9 @@ class StateManager:
         Returns:
             Value for key, or default if not found
 
+        Raises:
+            StateError: If database operation fails
+
         Example:
             >>> state.get("backup.last_run.plex")
             datetime.datetime(2025, 10, 22, 10, 30, 0)
@@ -152,20 +225,22 @@ class StateManager:
             'default_value'
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                cursor = conn.execute(
-                    "SELECT value, type FROM state WHERE key = ?", (key,)
-                )
-                row = cursor.fetchone()
+                with self._get_connection() as conn:
+                    cursor = conn.execute(
+                        "SELECT value, type FROM state WHERE key = ?", (key,)
+                    )
+                    row = cursor.fetchone()
 
-                if row is None:
-                    return default
+                    if row is None:
+                        return default
 
-                value_str, type_name = row
-                return self._deserialize_value(value_str, type_name)
-            finally:
-                conn.close()
+                    value_str, type_name = row
+                    return self._deserialize_value(value_str, type_name)
+            except StateError:
+                raise
+            except (sqlite3.Error, ValueError) as e:
+                raise StateError(f"Failed to get key '{key}': {e}") from e
 
     def set(self, key: str, value: Any) -> None:
         """
@@ -180,27 +255,33 @@ class StateManager:
 
         Raises:
             TypeError: If value type is not supported
+            StateError: If database operation fails
 
         Example:
             >>> state.set("backup.last_run.plex", datetime.now())
             >>> state.set("update.count", 42)
             >>> state.set("config.settings", {"enabled": True, "retries": 3})
         """
-        value_str, type_name = self._serialize_value(value)
+        try:
+            value_str, type_name = self._serialize_value(value)
+        except TypeError as e:
+            raise TypeError(f"Failed to serialize value for key '{key}': {e}") from e
 
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO state (key, value, type, updated_at)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
-                    (key, value_str, type_name),
-                )
-                conn.commit()
-            finally:
-                conn.close()
+                with self._get_connection() as conn:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO state (key, value, type, updated_at)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (key, value_str, type_name),
+                    )
+                    conn.commit()
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(f"Failed to set key '{key}': {e}") from e
 
     def delete(self, key: str) -> None:
         """
@@ -211,16 +292,21 @@ class StateManager:
         Args:
             key: Key to delete
 
+        Raises:
+            StateError: If database operation fails
+
         Example:
             >>> state.delete("backup.last_run.plex")
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                conn.execute("DELETE FROM state WHERE key = ?", (key,))
-                conn.commit()
-            finally:
-                conn.close()
+                with self._get_connection() as conn:
+                    conn.execute("DELETE FROM state WHERE key = ?", (key,))
+                    conn.commit()
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(f"Failed to delete key '{key}': {e}") from e
 
     def exists(self, key: str) -> bool:
         """
@@ -232,19 +318,24 @@ class StateManager:
         Returns:
             True if key exists, False otherwise
 
+        Raises:
+            StateError: If database operation fails
+
         Example:
             >>> if state.exists("backup.last_run.plex"):
             ...     print("Backup has run before")
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                cursor = conn.execute(
-                    "SELECT 1 FROM state WHERE key = ? LIMIT 1", (key,)
-                )
-                return cursor.fetchone() is not None
-            finally:
-                conn.close()
+                with self._get_connection() as conn:
+                    cursor = conn.execute(
+                        "SELECT 1 FROM state WHERE key = ? LIMIT 1", (key,)
+                    )
+                    return cursor.fetchone() is not None
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(f"Failed to check key '{key}': {e}") from e
 
     def get_all(self) -> Dict[str, Any]:
         """
@@ -253,21 +344,26 @@ class StateManager:
         Returns:
             Dictionary of all keys and their values
 
+        Raises:
+            StateError: If database operation fails
+
         Example:
             >>> all_state = state.get_all()
             >>> for key, value in all_state.items():
             ...     print(f"{key}: {value}")
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                cursor = conn.execute("SELECT key, value, type FROM state")
-                result = {}
-                for key, value_str, type_name in cursor.fetchall():
-                    result[key] = self._deserialize_value(value_str, type_name)
-                return result
-            finally:
-                conn.close()
+                with self._get_connection() as conn:
+                    cursor = conn.execute("SELECT key, value, type FROM state")
+                    result = {}
+                    for key, value_str, type_name in cursor.fetchall():
+                        result[key] = self._deserialize_value(value_str, type_name)
+                    return result
+            except StateError:
+                raise
+            except (sqlite3.Error, ValueError) as e:
+                raise StateError(f"Failed to get all state: {e}") from e
 
     def clear(self) -> None:
         """
@@ -275,16 +371,21 @@ class StateManager:
 
         Useful for testing or resetting application state.
 
+        Raises:
+            StateError: If database operation fails
+
         Example:
             >>> state.clear()  # Remove all state
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                conn.execute("DELETE FROM state")
-                conn.commit()
-            finally:
-                conn.close()
+                with self._get_connection() as conn:
+                    conn.execute("DELETE FROM state")
+                    conn.commit()
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(f"Failed to clear state: {e}") from e
 
     def get_keys(self, prefix: Optional[str] = None) -> list[str]:
         """
@@ -296,20 +397,27 @@ class StateManager:
         Returns:
             List of keys matching the prefix
 
+        Raises:
+            StateError: If database operation fails
+
         Example:
             >>> backup_keys = state.get_keys("backup.")
             >>> # Returns: ['backup.last_run.plex', 'backup.last_run.nginx', ...]
         """
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
             try:
-                if prefix:
-                    cursor = conn.execute(
-                        "SELECT key FROM state WHERE key LIKE ?", (f"{prefix}%",)
-                    )
-                else:
-                    cursor = conn.execute("SELECT key FROM state")
+                with self._get_connection() as conn:
+                    if prefix:
+                        cursor = conn.execute(
+                            "SELECT key FROM state WHERE key LIKE ?", (f"{prefix}%",)
+                        )
+                    else:
+                        cursor = conn.execute("SELECT key FROM state")
 
-                return [row[0] for row in cursor.fetchall()]
-            finally:
-                conn.close()
+                    return [row[0] for row in cursor.fetchall()]
+            except StateError:
+                raise
+            except sqlite3.Error as e:
+                raise StateError(
+                    f"Failed to get keys with prefix '{prefix}': {e}"
+                ) from e

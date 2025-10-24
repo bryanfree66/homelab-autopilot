@@ -19,6 +19,15 @@ from pydantic import (
 )
 
 
+class ConfigError(Exception):
+    """
+    Exception raised for configuration-related errors.
+
+    Used for missing required values, invalid paths, and other
+    configuration problems that should fail fast.
+    """
+
+
 class HypervisorConfig(BaseModel):
     """Hypervisor configuration."""
 
@@ -349,7 +358,7 @@ class ConfigLoader:
 
         Raises:
             FileNotFoundError: If file doesn't exist
-            ValueError: If YAML parsing fails
+            ValueError: If YAML parsing fails or content is not a dictionary
         """
         if not path.exists():
             raise FileNotFoundError(f"Configuration file not found: {path}")
@@ -361,7 +370,8 @@ class ConfigLoader:
                     return {}
                 if not isinstance(content, dict):
                     raise ValueError(
-                        f"Configuration must be a YAML dictionary, got {type(content)}"
+                        f"Configuration must be a YAML dictionary in {path}, "
+                        f"got {type(content).__name__}"
                     )
                 return content
         except yaml.YAMLError as e:
@@ -410,9 +420,7 @@ class ConfigLoader:
         Load all config files, merge them, and validate.
 
         Raises:
-            FileNotFoundError: If any config file doesn't exist
-            ValidationError: If validation fails
-            ValueError: If YAML parsing fails
+            ConfigError: If any config file doesn't exist, validation fails, or parsing fails
         """
         # Load primary config
         self._raw_config = self._load_yaml(self.config_path)
@@ -426,7 +434,7 @@ class ConfigLoader:
         try:
             self._validated_config = HomeLabConfig.model_validate(self._raw_config)
         except ValidationError as e:
-            # Re-raise with helpful context
+            # Re-raise as ConfigError with helpful context
             error_count = len(e.errors())
             error_msg = (
                 f"Configuration validation failed with {error_count} error(s):\n"
@@ -434,9 +442,7 @@ class ConfigLoader:
             for error in e.errors():
                 loc = ".".join(str(l) for l in error["loc"])
                 error_msg += f"  - {loc}: {error['msg']}\n"
-            raise ValidationError.from_exception_data(
-                title="Configuration Validation Failed", line_errors=e.errors()
-            ) from e
+            raise ConfigError(error_msg) from e
 
     def _get_nested_value(
         self,
@@ -474,7 +480,7 @@ class ConfigLoader:
 
         return current
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: Any = None, required: bool = False) -> Any:
         """
         Get configuration value using dot notation.
 
@@ -484,20 +490,28 @@ class ConfigLoader:
         Args:
             key: Dot-separated key path (e.g., "global.hypervisor.type")
             default: Default value if key doesn't exist
+            required: If True, raise ConfigError instead of returning default
 
         Returns:
             Configuration value, or default if not found
 
         Raises:
             ValueError: If key depth exceeds MAX_DOT_DEPTH
+            ConfigError: If required=True and key doesn't exist
 
         Example:
             >>> loader.get("global.hypervisor.type")
             'proxmox'
             >>> loader.get("global.backup.retention_days", 30)
             30
+            >>> loader.get("global.hypervisor.host", required=True)  # Raises if missing
         """
         if not self._validated_config:
+            if required:
+                raise ConfigError(
+                    f"Required configuration key '{key}' not found: "
+                    "configuration not loaded or invalid"
+                )
             return default
 
         keys = key.split(".")
@@ -511,7 +525,16 @@ class ConfigLoader:
         if keys[0] == "global":
             keys[0] = "global_config"
 
-        return self._get_nested_value(self._validated_config, keys, default)
+        value = self._get_nested_value(self._validated_config, keys, default)
+
+        # If required and value is None or equals default, raise error
+        if required and value is None:
+            raise ConfigError(
+                f"Required configuration key '{key}' is missing or null. "
+                f"Please ensure this value is set in your configuration file."
+            )
+
+        return value
 
     def get_array(self, key: str) -> List[Any]:
         """

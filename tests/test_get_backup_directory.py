@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from core.backup_engine import BackupEngine
+from core.backup_engine import BackupEngine, BackupError
 from core.config_loader import ConfigLoader
 from lib.state_manager import StateManager
 
@@ -201,7 +201,7 @@ class TestGetBackupDirectory:
         assert backup_dir.exists()
 
     def test_permission_error_raises(self, backup_engine_temp, monkeypatch):
-        """Test that permission errors are raised."""
+        """Test that permission errors are wrapped in BackupError."""
         engine, backup_root = backup_engine_temp
 
         def mock_mkdir(*args, **kwargs):
@@ -210,10 +210,15 @@ class TestGetBackupDirectory:
         # Monkey patch mkdir to raise permission error
         monkeypatch.setattr(Path, "mkdir", mock_mkdir)
 
-        with pytest.raises(OSError) as exc_info:
+        with pytest.raises(BackupError) as exc_info:
             engine._get_backup_directory("test")
 
+        # Should have helpful error message
+        assert "Failed to create backup directory" in str(exc_info.value)
         assert "Permission denied" in str(exc_info.value)
+        
+        # Should chain the original OSError
+        assert isinstance(exc_info.value.__cause__, OSError)
 
     def test_absolute_path_returned(self, backup_engine_temp):
         """Test that returned path is absolute."""

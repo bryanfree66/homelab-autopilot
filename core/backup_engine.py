@@ -16,6 +16,15 @@ from lib.state_manager import StateManager
 from plugins.base import HypervisorPlugin, ServicePlugin
 
 
+class BackupError(Exception):
+    """
+    Exception raised for backup-related errors.
+
+    Used for invalid backup configurations, failed operations, and other
+    backup problems that should fail fast or require attention.
+    """
+
+
 class BackupEngine:
     """
     Orchestrates backup operations across all services.
@@ -46,6 +55,9 @@ class BackupEngine:
             state_manager: State manager for tracking backups
             dry_run: If True, simulate backups without executing
 
+        Raises:
+            BackupError: If backup configuration is invalid or missing
+
         Example:
             >>> config = ConfigLoader(Path("config.yaml"))
             >>> state = StateManager(Path("state.db"))
@@ -58,10 +70,60 @@ class BackupEngine:
         self._plugin_cache: Dict[str, Union[HypervisorPlugin, ServicePlugin]] = {}
         self._backup_config_cache: Optional[Dict[str, Any]] = None
 
+        # Validate backup configuration on initialization (fail fast)
+        self._validate_backup_config()
+
         if self.dry_run:
             self.logger.info("BackupEngine initialized in DRY RUN mode")
         else:
             self.logger.info("BackupEngine initialized")
+
+    def _validate_backup_config(self) -> None:
+        """
+        Validate backup configuration on initialization.
+
+        Ensures required backup settings exist and are valid.
+
+        Raises:
+            BackupError: If backup configuration is invalid or missing required values
+        """
+        # Check if backup is enabled
+        backup_enabled = self.config.get("global.backup.enabled", True)
+        if not backup_enabled:
+            self.logger.warning("Backup is disabled in configuration")
+            return
+
+        # Validate backup root path exists
+        try:
+            backup_root = self.config.get("global.backup.root")
+            if not backup_root:
+                raise BackupError(
+                    "Backup root path (global.backup.root) is required but not configured"
+                )
+
+            backup_path = Path(backup_root)
+            if not backup_path.is_absolute():
+                raise BackupError(
+                    f"Backup root path must be absolute: {backup_root}"
+                )
+
+        except Exception as e:
+            if isinstance(e, BackupError):
+                raise
+            raise BackupError(
+                f"Invalid backup configuration: {e}. "
+                "Please ensure global.backup.root is set in your configuration."
+            ) from e
+
+        # Validate retention policy
+        retention_days = self.config.get("global.backup.retention_days")
+        if retention_days is not None:
+            if not isinstance(retention_days, int) or retention_days < 1:
+                raise BackupError(
+                    f"Backup retention_days must be a positive integer, got: {retention_days}"
+                )
+
+        self.logger.debug("Backup configuration validated successfully")
 
     # ========================================================================
     # Main Orchestration Methods
@@ -380,15 +442,20 @@ class BackupEngine:
             Path to service backup directory
 
         Raises:
-            OSError: If directory cannot be created
+            BackupError: If directory cannot be created or is inaccessible
 
         Example:
             >>> backup_dir = engine._get_backup_directory("nextcloud")
             >>> print(backup_dir)  # /mnt/backups/homelab/nextcloud/
         """
         # Get backup root from config
-        backup_config = self._get_backup_config()
-        backup_root = backup_config["root"]
+        try:
+            backup_config = self._get_backup_config()
+            backup_root = backup_config["root"]
+        except Exception as e:
+            raise BackupError(
+                f"Failed to get backup configuration for service '{service_name}': {e}"
+            ) from e
 
         # Create service-specific subdirectory
         backup_dir = backup_root / service_name
@@ -398,10 +465,12 @@ class BackupEngine:
             backup_dir.mkdir(parents=True, exist_ok=True)
             self.logger.debug(f"Backup directory ready: {backup_dir}")
         except OSError as e:
-            self.logger.error(
-                f"Failed to create backup directory {backup_dir}: {e}"
+            error_msg = (
+                f"Failed to create backup directory {backup_dir}: {e}. "
+                f"Check directory permissions and disk space."
             )
-            raise
+            self.logger.error(error_msg)
+            raise BackupError(error_msg) from e
 
         return backup_dir
 
@@ -463,6 +532,9 @@ class BackupEngine:
             Dict containing backup settings (root, retention_days, etc.)
             Converts Pydantic models to dicts for easier access.
 
+        Raises:
+            BackupError: If backup configuration is invalid or inaccessible
+
         Example:
             >>> backup_config = engine._get_backup_config()
             >>> print(backup_config['root'])
@@ -472,57 +544,60 @@ class BackupEngine:
         if self._backup_config_cache is not None:
             return self._backup_config_cache
 
-        # Get BackupConfig Pydantic model from ConfigLoader
-        backup_config = self.config.get("global.backup")
+        try:
+            # Get BackupConfig Pydantic model from ConfigLoader
+            # Validation already done in __init__, so this should succeed
+            backup_config = self.config.get("global.backup")
 
-        if backup_config is None:
-            # This shouldn't happen if config validation passed, but handle gracefully
-            self.logger.warning("No backup configuration found, using defaults")
-            self._backup_config_cache = {
-                "enabled": True,
-                "root": Path("/var/lib/homelab-autopilot/backups"),
-                "retention_days": 30,
-                "compression": True,
-                "proxmox_backup_server": None,
-                "direct_storage": None,
+            if backup_config is None:
+                raise BackupError(
+                    "Backup configuration section 'global.backup' is missing. "
+                    "Please add backup configuration to your config file."
+                )
+
+            # Convert Pydantic model to dict
+            config_dict = {
+                "enabled": backup_config.enabled,
+                "root": backup_config.root,
+                "retention_days": backup_config.retention_days,
+                "compression": backup_config.compression,
             }
-            return self._backup_config_cache
 
-        # Convert Pydantic model to dict
-        config_dict = {
-            "enabled": backup_config.enabled,
-            "root": backup_config.root,
-            "retention_days": backup_config.retention_days,
-            "compression": backup_config.compression,
-        }
+            # Handle optional PBS config (also a Pydantic model)
+            if backup_config.proxmox_backup_server is not None:
+                pbs = backup_config.proxmox_backup_server
+                config_dict["proxmox_backup_server"] = {
+                    "enabled": pbs.enabled,
+                    "server": pbs.server,
+                    "port": pbs.port,
+                    "datastore": pbs.datastore,
+                    "username": pbs.username,
+                    "password": pbs.password,
+                    "password_command": pbs.password_command,
+                    "verify_ssl": pbs.verify_ssl,
+                }
+            else:
+                config_dict["proxmox_backup_server"] = None
 
-        # Handle optional PBS config (also a Pydantic model)
-        if backup_config.proxmox_backup_server is not None:
-            pbs = backup_config.proxmox_backup_server
-            config_dict["proxmox_backup_server"] = {
-                "enabled": pbs.enabled,
-                "server": pbs.server,
-                "port": pbs.port,
-                "datastore": pbs.datastore,
-                "username": pbs.username,
-                "password": pbs.password,
-                "password_command": pbs.password_command,
-                "verify_ssl": pbs.verify_ssl,
-            }
-        else:
-            config_dict["proxmox_backup_server"] = None
+            # Handle optional direct storage config (also a Pydantic model)
+            if backup_config.direct_storage is not None:
+                ds = backup_config.direct_storage
+                config_dict["direct_storage"] = {
+                    "enabled": ds.enabled,
+                    "path": ds.path,
+                    "format": ds.format,
+                }
+            else:
+                config_dict["direct_storage"] = None
 
-        # Handle optional direct storage config (also a Pydantic model)
-        if backup_config.direct_storage is not None:
-            ds = backup_config.direct_storage
-            config_dict["direct_storage"] = {
-                "enabled": ds.enabled,
-                "path": ds.path,
-                "format": ds.format,
-            }
-        else:
-            config_dict["direct_storage"] = None
+            # Cache and return
+            self._backup_config_cache = config_dict
+            return config_dict
 
-        # Cache and return
-        self._backup_config_cache = config_dict
-        return config_dict
+        except Exception as e:
+            if isinstance(e, BackupError):
+                raise
+            raise BackupError(
+                f"Failed to load backup configuration: {e}. "
+                "Check your configuration file for errors."
+            ) from e
