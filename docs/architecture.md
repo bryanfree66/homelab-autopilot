@@ -895,6 +895,473 @@ See [homelab-autopilot.yaml.example](../homelab-autopilot.yaml.example) for comp
 3. Add configuration options
 4. Submit PR
 
+## Automated Restore Testing Architecture
+
+### Philosophy
+
+**Critical Insight from Research**: "Many organizations discover their backups are corrupted only during actual disaster recovery—the only reliable test is periodic restoration."
+
+Homelab Autopilot implements multi-tier backup verification to ensure backups are actually restorable:
+
+### Three-Tier Verification Strategy
+
+#### Tier 1: Integrity Checks (Phase 2)
+**Fast checks run after every backup**:
+- File exists and has expected size
+- Archive extracts without errors
+- Checksums/signatures validate
+- Metadata is complete
+
+**Implementation**: Already part of `BackupEngine.verify_backup()`
+
+#### Tier 2: Functional Restore Testing (Phase 3)
+**Monthly automated restore testing**:
+- Randomly select services for restore testing
+- Restore to isolated test environment (separate VLAN/namespace)
+- Start service and verify functionality
+- Run application-specific health checks
+- Measure and track RTO (Recovery Time Objective)
+- Cleanup test environment automatically
+- Alert on failures
+
+**Implementation**: New `RestoreEngine` component
+
+```python
+class RestoreEngine:
+    """Automated restore testing and disaster recovery orchestration"""
+    
+    def __init__(self, config: ConfigLoader, state: StateManager):
+        """Initialize restore engine"""
+        self.config = config
+        self.state = state
+        self.logger = get_logger()
+    
+    def test_restore_service(
+        self, 
+        service_name: str, 
+        test_environment: str = None
+    ) -> RestoreTestResult:
+        """
+        Restore service to isolated test environment and validate
+        
+        Process:
+        1. Select backup (latest or specific version)
+        2. Provision test environment (isolated VLAN/namespace)
+        3. Restore service to test environment
+        4. Start service
+        5. Run plugin-defined health checks
+        6. Measure RTO
+        7. Cleanup test environment
+        8. Record results in state database
+        
+        Returns:
+            RestoreTestResult with success status, RTO, and validation results
+        """
+        
+    def schedule_random_restore_tests(self, count: int = 3) -> List[RestoreTestResult]:
+        """
+        Randomly select services for monthly restore testing
+        
+        Selection strategy:
+        - Prioritize services not tested recently
+        - Weight by service criticality (from config)
+        - Ensure diverse service types (VM, LXC, Docker)
+        
+        Args:
+            count: Number of services to test this cycle
+            
+        Returns:
+            List of restore test results
+        """
+        
+    def validate_service_health(self, service: ServiceConfig) -> HealthCheckResult:
+        """
+        Run application-specific health validation
+        
+        Delegates to service plugin for custom checks:
+        - Database: Can connect, query system tables
+        - Web server: HTTP response, expected content
+        - Container: Process running, ports listening
+        
+        Returns:
+            Health check results with detailed diagnostics
+        """
+        
+    def full_disaster_recovery_drill(self, restore_plan: str) -> DRDrillResult:
+        """
+        Execute full disaster recovery drill (quarterly/annual)
+        
+        This is a guided workflow with manual verification steps:
+        1. Display pre-checks and preparation steps
+        2. Orchestrate restore of all critical services
+        3. Validate inter-service dependencies
+        4. Generate DR report with lessons learned
+        5. Update runbooks based on findings
+        
+        Args:
+            restore_plan: Path to DR plan YAML
+            
+        Returns:
+            Detailed drill results and recommendations
+        """
+```
+
+**Configuration Schema**:
+
+```yaml
+global:
+  backup:
+    restore_testing:
+      enabled: true
+      schedule: "monthly"  # or cron expression
+      random_services: 3
+      test_environment:
+        type: "isolated_vlan"  # or "namespace", "separate_node"
+        vlan_id: 999
+        network: "10.99.0.0/24"
+      rto_target_minutes: 15  # Alert if restore takes longer
+      cleanup_after_test: true
+      cleanup_delay_minutes: 5  # Time to inspect before cleanup
+      notifications:
+        on_success: false
+        on_failure: true
+        include_rto_metrics: true
+
+services:
+  - name: nextcloud
+    type: vm
+    # ... other config ...
+    restore_testing:
+      priority: high  # Test more frequently
+      health_checks:
+        - type: http
+          url: "http://localhost/status.php"
+          expected_status: 200
+        - type: database
+          command: "mysql -e 'SELECT 1'"
+        - type: custom
+          script: "/opt/homelab-autopilot/checks/nextcloud_health.sh"
+```
+
+**RTO Metrics Tracking**:
+
+```python
+# State database schema for restore test results
+{
+    "restore_tests": {
+        "nextcloud_20250123_143022": {
+            "service": "nextcloud",
+            "test_timestamp": "2025-01-23T14:30:22Z",
+            "backup_used": "nextcloud_20250122_020000_vm.tar.gz",
+            "success": true,
+            "rto_seconds": 847,
+            "health_checks_passed": 3,
+            "health_checks_failed": 0,
+            "test_environment": "vlan-999",
+            "cleaned_up": true
+        }
+    }
+}
+```
+
+#### Tier 3: Full DR Drills (Phase 4)
+**Quarterly or annual full infrastructure restore**:
+- Guided workflow with runbook automation
+- Restore all critical services in dependency order
+- Manual verification steps at key points
+- Generate comprehensive DR report
+- Update runbooks based on findings
+- Executive summary for stakeholders
+
+### Benefits
+
+1. **Confidence**: Know backups work before you need them
+2. **RTO Visibility**: Understand how long recovery actually takes
+3. **Runbook Validation**: Keep DR procedures current
+4. **Continuous Improvement**: Learn from test failures safely
+5. **Compliance**: Document restore capability for audits
+
+## Deduplication Strategy Architecture
+
+### The Storage Efficiency Spectrum
+
+Homelab Autopilot supports three deduplication strategies, each with different trade-offs:
+
+### Strategy Comparison
+
+| Strategy | Complexity | Storage Efficiency | Speed | Best For |
+|----------|-----------|-------------------|-------|----------|
+| **Compression Only** | Low | 2-3x | Fast | Small homelabs (<5 VMs), testing |
+| **PBS Integration** | Medium | 10-50x | Medium | Production homelabs, multiple VMs/LXCs |
+| **Native Chunking** | High | 5-15x | Medium | Users wanting dedup without PBS |
+
+### Tier 1: Compression Only (Phase 2 - Available Now)
+
+**How It Works**:
+- Create tar archives of backups
+- Compress with zstd (level 3 default, configurable)
+- Store as individual files
+
+**Storage Efficiency**:
+- ~2-3x reduction for typical VM disk images
+- ~3-5x reduction for text configs and logs
+- No deduplication between backups
+
+**Configuration**:
+```yaml
+global:
+  backup:
+    root: /mnt/backups/homelab
+    compression: true
+    compression_algorithm: zstd  # or gzip, lz4
+    compression_level: 3  # 1-19 for zstd
+```
+
+**Storage Growth Example**:
+```
+Service: nextcloud (32GB VM)
+Daily backups, 30-day retention:
+
+Without compression: 32GB × 30 = 960GB
+With zstd compression: 12GB × 30 = 360GB (2.7x reduction)
+With PBS deduplication: ~25GB total (37x reduction)
+```
+
+**When to Use**:
+- Getting started with Homelab Autopilot
+- Small homelab (1-5 VMs)
+- Testing and development
+- Budget storage (don't mind larger sizes)
+
+### Tier 2: PBS Integration (Phase 2 - Recommended)
+
+**How It Works**:
+- Proxmox Backup Server uses content-addressable storage
+- 4 MiB fixed chunks for VMs (block devices)
+- Dynamic chunks for file systems (buzhash rolling hash)
+- SHA-256 fingerprinting for deduplication
+- Client-side encryption (AES-256-GCM)
+
+**Storage Efficiency**:
+- 10-50x deduplication for typical workloads
+- Production users report 42TB restored data from 170GB stored
+- Incremental backups transfer only changed chunks
+- First backup: 85 seconds for 32GB
+- Subsequent backups: 4 seconds for 1.2GB changes
+
+**Configuration**:
+```yaml
+global:
+  backup:
+    root: /mnt/backups/homelab  # Fallback for host configs
+    
+    proxmox_backup_server:
+      enabled: true
+      server: 192.168.1.100
+      port: 8007
+      datastore: main-backups
+      username: root@pam
+      password_command: "cat /etc/homelab-autopilot/secrets/pbs_password"
+      verify_ssl: true
+      
+      # Optional: Sync to second PBS for redundancy
+      sync_jobs:
+        - target_server: 192.168.2.100
+          target_datastore: offsite-backups
+          schedule: "daily"
+```
+
+**Storage Growth Example**:
+```
+Environment: 10 VMs, 300GB total, daily backups, 30-day retention
+
+Without PBS: 300GB × 30 = 9TB
+With PBS: ~800GB total (11x deduplication)
+  - Day 1: 300GB (full)
+  - Days 2-30: ~20GB/day (incrementals)
+```
+
+**PBS Setup Requirements**:
+- Dedicated VM or physical machine
+- 4GB+ RAM recommended
+- SSD for datastore (HDD acceptable for archival)
+- Network bandwidth for backup traffic
+
+**When to Use**:
+- Production homelab
+- Multiple VMs/LXCs (5+)
+- Limited storage budget
+- Want verification and encryption features
+- Already using Proxmox VE
+
+### Tier 3: Native Chunk-Based Storage (Phase 5+ - Future)
+
+**Planned Features**:
+- Lightweight content-addressable storage
+- Inspired by PBS but simpler implementation
+- SQLite for chunk metadata
+- Filesystem for chunk storage
+- Optional client-side encryption
+
+**Target Efficiency**:
+- 5-15x deduplication
+- Balance between complexity and efficiency
+- No separate server required
+
+**Use Case**:
+- Users who want deduplication
+- Don't want PBS complexity
+- Willing to trade some efficiency for simplicity
+
+**Implementation Notes**:
+This will be built on the Storage Backend abstraction (see below).
+
+### Storage Backend Abstraction
+
+To support all strategies, Homelab Autopilot uses pluggable storage backends:
+
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class StorageMetrics:
+    """Storage efficiency metrics"""
+    total_backups: int
+    logical_size_bytes: int  # Size if not deduplicated
+    physical_size_bytes: int  # Actual disk usage
+    deduplication_ratio: float  # logical/physical
+    compression_ratio: float
+    storage_efficiency: float  # Combined dedup+compression
+
+class StorageBackend(ABC):
+    """Abstract storage backend for backup data"""
+    
+    @abstractmethod
+    def store_backup(
+        self, 
+        backup_data: bytes, 
+        metadata: BackupMetadata
+    ) -> str:
+        """
+        Store backup data, return unique identifier
+        
+        Returns:
+            Backup identifier (path, PBS snapshot ID, etc.)
+        """
+        
+    @abstractmethod
+    def retrieve_backup(self, identifier: str) -> bytes:
+        """Retrieve backup data by identifier"""
+        
+    @abstractmethod
+    def list_backups(
+        self, 
+        service_name: str = None
+    ) -> List[BackupMetadata]:
+        """List available backups, optionally filtered by service"""
+        
+    @abstractmethod
+    def delete_backup(self, identifier: str) -> bool:
+        """Delete backup by identifier"""
+        
+    @abstractmethod
+    def get_storage_metrics(self) -> StorageMetrics:
+        """Return storage efficiency metrics"""
+        
+    @abstractmethod
+    def verify_integrity(self, identifier: str) -> bool:
+        """Verify backup integrity (checksums, etc.)"""
+
+
+class CompressedFileBackend(StorageBackend):
+    """Simple compressed tar.gz files (Tier 1)"""
+    
+    def __init__(self, backup_root: Path, compression: str = "zstd"):
+        self.backup_root = backup_root
+        self.compression = compression
+
+
+class ProxmoxBackupServerBackend(StorageBackend):
+    """PBS integration via proxmoxer (Tier 2)"""
+    
+    def __init__(self, pbs_config: ProxmoxBackupServerConfig):
+        self.pbs_config = pbs_config
+        self.client = ProxmoxAPI(...)  # proxmoxer
+
+
+class ChunkedStorageBackend(StorageBackend):
+    """Future: Native chunk-based deduplication (Tier 3)"""
+    
+    def __init__(self, storage_root: Path, chunk_size: int = 4 * 1024 * 1024):
+        self.storage_root = storage_root
+        self.chunk_size = chunk_size
+        self.metadata_db = SQLite(...)
+```
+
+### Decision Flowchart
+
+```
+Start: Need to backup homelab?
+│
+├─ Small homelab (<5 VMs)? ──Yes──> Use Compression Only
+│                                     - Simple setup
+│                                     - Good enough for small scale
+│
+├─ Already using Proxmox? ──Yes──> Use PBS Integration
+│                                    - Best deduplication
+│                                    - Enterprise features
+│
+├─ Want deduplication but not PBS? ──Yes──> Wait for Native Chunking (Phase 5)
+│                                             Or use Compression + larger storage
+│
+└─ Not sure? ──> Start with Compression Only
+                  Migrate to PBS later (easy transition)
+```
+
+### Migration Path
+
+Users can transition between strategies:
+
+1. **Compression → PBS**: 
+   - Enable PBS in config
+   - Run first full backup to PBS
+   - Keep compressed backups as archive
+   
+2. **PBS → Compression**:
+   - Disable PBS in config
+   - System falls back to compression
+   - PBS backups remain accessible
+
+3. **Compression → Native Chunking** (future):
+   - Enable chunked storage backend
+   - Incremental migration of backups
+   - No downtime required
+
+### Documentation Strategy
+
+For users to make informed decisions, we'll provide:
+
+1. **Storage Calculator**: Web tool estimating storage needs
+   - Input: VM count, sizes, change rate, retention
+   - Output: Storage requirements per strategy
+
+2. **Real-World Examples**: 
+   - Small homelab (3 VMs): Compression sufficient
+   - Medium homelab (10 VMs): PBS recommended
+   - Large homelab (25+ VMs): PBS essential
+
+3. **Cost-Benefit Analysis**:
+   - Setup time vs storage savings
+   - Operational complexity vs features
+   - When to invest in PBS
+
+4. **Best Practices Guide**:
+   - PBS hardware recommendations
+   - Network design for backup traffic
+   - Testing and validation procedures
+
 ## Future Architecture Improvements
 
 ### Planned Enhancements
