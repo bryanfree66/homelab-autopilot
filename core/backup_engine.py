@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+import requests
+
 from core.config_loader import ConfigLoader, ServiceConfig
 from lib.logger import get_logger
 from lib.state_manager import StateManager
@@ -233,16 +235,135 @@ class BackupEngine:
                 {
                     'method': 'pbs' | 'direct' | 'local',
                     'path': Path to backup location,
-                    'storage_id': PBS storage ID (if method='pbs'),
-                    ...
+                    'pbs_config': PBS config dict (if method='pbs'),
                 }
+
+        Raises:
+            BackupError: If PBS is enabled but config is incomplete or unreachable,
+                        or if direct_storage is enabled but path is not configured
 
         Example:
             >>> service = config.get_service_config("nextcloud")
             >>> dest = engine._determine_backup_destination(service)
             >>> print(dest['method'])  # 'pbs' or 'direct' or 'local'
         """
-        raise NotImplementedError
+        backup_config = self._get_backup_config()
+        service_type = service.type.lower()
+
+        # For VM/LXC types, check PBS -> direct storage -> local
+        if service_type in ["vm", "lxc"]:
+            # 1a. Check PBS first
+            pbs_config = backup_config.get("proxmox_backup_server")
+            if pbs_config and pbs_config.get("enabled"):
+                self.logger.debug(
+                    f"Service '{service.name}' ({service_type}): Checking PBS configuration"
+                )
+
+                # Validate PBS config is complete
+                required_fields = ["server", "datastore", "username"]
+                missing_fields = [
+                    field for field in required_fields if not pbs_config.get(field)
+                ]
+                if missing_fields:
+                    raise BackupError(
+                        f"PBS is enabled but configuration is incomplete. "
+                        f"Missing required fields: {', '.join(missing_fields)}. "
+                        f"Please update global.backup.proxmox_backup_server in your configuration."
+                    )
+
+                # Validate PBS connectivity
+                server = pbs_config["server"]
+                port = pbs_config.get("port", 8007)
+                verify_ssl = pbs_config.get("verify_ssl", True)
+
+                self.logger.debug(f"Validating PBS connectivity to {server}:{port}")
+
+                try:
+                    # Use a lightweight API endpoint to test connectivity
+                    url = f"https://{server}:{port}/api2/json/version"
+                    response = requests.get(
+                        url, verify=verify_ssl, timeout=5
+                    )
+                    response.raise_for_status()
+
+                    self.logger.info(
+                        f"Service '{service.name}': Using PBS at {server}:{port}"
+                    )
+
+                    return {
+                        "method": "pbs",
+                        "pbs_config": pbs_config,
+                    }
+
+                except requests.exceptions.Timeout:
+                    raise BackupError(
+                        f"PBS connectivity check failed: Connection to {server}:{port} timed out after 5 seconds. "
+                        f"Please verify the server is reachable and the configuration is correct."
+                    )
+                except requests.exceptions.ConnectionError as e:
+                    raise BackupError(
+                        f"PBS connectivity check failed: Cannot connect to {server}:{port}. "
+                        f"Error: {e}. Please verify the server address and network connectivity."
+                    )
+                except requests.exceptions.RequestException as e:
+                    raise BackupError(
+                        f"PBS connectivity check failed for {server}:{port}: {e}. "
+                        f"Please verify the PBS server is running and accessible."
+                    )
+
+            # 1b. Check direct storage next
+            direct_config = backup_config.get("direct_storage")
+            if direct_config and direct_config.get("enabled"):
+                self.logger.debug(
+                    f"Service '{service.name}' ({service_type}): Checking direct storage configuration"
+                )
+
+                # Validate that path is configured
+                direct_path = direct_config.get("path")
+                if not direct_path:
+                    raise BackupError(
+                        f"Direct storage is enabled but path is not configured. "
+                        f"Please set global.backup.direct_storage.path in your configuration."
+                    )
+
+                # Cluster safety: Warn if path doesn't look like shared storage
+                path_str = str(direct_path)
+                shared_prefixes = ["/mnt", "/nfs", "/ceph"]
+                is_shared = any(path_str.startswith(prefix) for prefix in shared_prefixes)
+
+                if not is_shared:
+                    self.logger.warning(
+                        f"Direct storage path '{path_str}' does not appear to be on shared storage "
+                        f"(expected path starting with {', '.join(shared_prefixes)}). "
+                        f"In a cluster environment, this may cause backups to be inaccessible from other nodes."
+                    )
+
+                self.logger.info(
+                    f"Service '{service.name}': Using direct storage at {direct_path}"
+                )
+
+                return {
+                    "method": "direct",
+                    "path": direct_path,
+                }
+
+            # 1c. Fallback to local
+            self.logger.debug(
+                f"Service '{service.name}' ({service_type}): Using local backup (fallback)"
+            )
+
+        # For other service types (docker, systemd, generic, host), always use local
+        else:
+            self.logger.debug(
+                f"Service '{service.name}' ({service_type}): Using local backup"
+            )
+
+        # Return local backup configuration
+        backup_root = backup_config["root"]
+        return {
+            "method": "local",
+            "path": backup_root,
+        }
 
     def _perform_backup(
         self, service: ServiceConfig, destination: Dict[str, Any]
