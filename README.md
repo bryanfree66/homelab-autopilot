@@ -41,9 +41,11 @@ Homelab Autopilot is an open-source automation framework that **unifies backup m
 
 ### Current (Phase 2 - In Development)
 
+**Phase 1 Foundation - ✅ COMPLETE (98% coverage, 195 tests)**
+
 - ✅ **Configuration Management**
   - YAML-based configuration with Pydantic validation
-  - Type-safe configuration models
+  - Type-safe configuration models (PBS, DirectStorage support)
   - Dot notation access and config merging
   - Comprehensive validation and error reporting
 
@@ -64,6 +66,35 @@ Homelab Autopilot is an open-source automation framework that **unifies backup m
   - HypervisorPlugin for VM/LXC management
   - ServicePlugin for application-level operations
   - NotificationPlugin for alerts and notifications
+
+**Phase 2 Backup System - 🔄 IN PROGRESS (~25% complete, 78 tests)**
+
+- 🔄 **Backup Engine** (5/19 methods complete)
+  - ✅ Configuration retrieval and caching
+  - ✅ Timestamped backup filename generation
+  - ✅ Service backup directory management
+  - ✅ Backup file listing and sorting
+  - ✅ Retention policy enforcement
+  - 🔄 Backup destination routing (PBS → direct → local)
+  - 🔄 Plugin orchestration and service backup
+  - 🔄 Backup verification and state tracking
+  - 🔄 Notification integration
+
+- 🔄 **Storage Backend Architecture**
+  - 🔄 Compression-only backend (zstd, Phase 2 baseline)
+  - 🔄 PBS integration backend (10-50x deduplication)
+  - 📅 Native chunking backend (Phase 5+)
+
+- 📅 **Restore Testing Engine** (Phase 3)
+  - Automated monthly restore verification
+  - RTO tracking and metrics
+  - Isolated test environment provisioning
+  - Application-aware health checks
+
+- 📅 **Plugins** (Coming next)
+  - Proxmox hypervisor plugin (PBS + direct storage)
+  - Generic service plugin (Docker, configs)
+  - Email notification plugin
 
 ### Planned Features
 
@@ -333,17 +364,28 @@ Key principles:
 
 ## 📊 Project Status
 
-**Current Version**: 0.1.0-alpha
-**Development Phase**: Phase 1 ✅ COMPLETE
-**Test Coverage**:
+**Current Version**: 0.2.0-alpha  
+**Development Phase**: Phase 2 🔄 IN PROGRESS (~25% complete)
+
+**Phase 1 Complete** ✅:
 - ConfigLoader: 95% (50 tests)
 - Logger: 100% (25 tests)
 - StateManager: 99% (35 tests)
 - Plugin Base Classes: 91% (32 tests)
 - Utility Functions: 99% (53 tests)
-- **Overall: 98%** (195 tests passing)
+- **Phase 1 Total: 98%** (195 tests passing)
 
-**Production Ready**: No - Moving to Phase 2
+**Phase 2 In Progress** 🔄:
+- BackupEngine: 5/19 methods (78 tests)
+  - ✅ Config retrieval, filename generation, directory management
+  - ✅ File listing, retention policy
+  - 🔄 Next: Backup destination routing, plugin orchestration
+- Storage Backends: Architecture designed, implementation pending
+- Restore Testing: Architecture designed (Phase 3)
+- Plugins: Coming next (Proxmox, Generic Service, Email)
+
+**Overall Test Coverage**: 98% (273 tests passing)  
+**Production Ready**: No - Alpha development (Phase 2 active)
 
 ## 📄 License
 
