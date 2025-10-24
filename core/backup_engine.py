@@ -365,6 +365,130 @@ class BackupEngine:
             "path": backup_root,
         }
 
+    def _create_backup_metadata(
+        self,
+        service: ServiceConfig,
+        backup_destination: Dict[str, Any],
+        backup_path: Optional[Path] = None,
+        duration_seconds: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create metadata dictionary for a backup operation.
+
+        Generates comprehensive metadata for tracking, auditing, and RTO analysis.
+        All metadata is JSON-serializable for storage in state DB or logs.
+
+        Args:
+            service: Service configuration
+            backup_destination: Output from _determine_backup_destination()
+            backup_path: Actual backup file path (if applicable, e.g., for direct/local)
+            duration_seconds: Backup operation duration for RTO tracking
+
+        Returns:
+            Dict containing backup metadata with all relevant fields.
+            All values are JSON-serializable.
+
+        Example:
+            >>> service = config.get_service_config("nextcloud")
+            >>> destination = engine._determine_backup_destination(service)
+            >>> metadata = engine._create_backup_metadata(
+            ...     service, destination, Path("/mnt/backups/nextcloud.tar.gz"), 45.2
+            ... )
+            >>> print(metadata['service_name'])  # 'nextcloud'
+            >>> print(metadata['backup_method'])  # 'pbs' or 'direct' or 'local'
+        """
+        # Extract basic service information
+        metadata: Dict[str, Any] = {
+            "service_name": service.name,
+            "service_type": service.type.lower(),
+            "backup_method": backup_destination["method"],
+            "timestamp": datetime.now().isoformat(),
+            "status": "pending",  # Initial status, updated later by backup operation
+        }
+
+        # Add backup path if provided
+        if backup_path is not None:
+            metadata["backup_path"] = str(backup_path)
+
+            # Calculate file size if path exists
+            try:
+                if backup_path.exists():
+                    metadata["file_size_bytes"] = backup_path.stat().st_size
+                    self.logger.debug(
+                        f"Backup file size for {service.name}: {metadata['file_size_bytes']} bytes"
+                    )
+                else:
+                    metadata["file_size_bytes"] = None
+                    self.logger.debug(
+                        f"Backup path {backup_path} does not exist yet, file_size set to None"
+                    )
+            except PermissionError as e:
+                self.logger.warning(
+                    f"Permission denied when checking backup file size for {backup_path}: {e}. "
+                    f"Setting file_size_bytes to None."
+                )
+                metadata["file_size_bytes"] = None
+            except OSError as e:
+                self.logger.warning(
+                    f"Error accessing backup file {backup_path}: {e}. "
+                    f"Setting file_size_bytes to None."
+                )
+                metadata["file_size_bytes"] = None
+        else:
+            metadata["backup_path"] = None
+            metadata["file_size_bytes"] = None
+
+        # Add duration if provided
+        if duration_seconds is not None:
+            metadata["duration_seconds"] = duration_seconds
+        else:
+            metadata["duration_seconds"] = None
+
+        # Add VM/LXC specific fields
+        if service.type.lower() in ["vm", "lxc"]:
+            if service.vmid is not None:
+                metadata["vmid"] = service.vmid
+            else:
+                metadata["vmid"] = None
+                self.logger.debug(
+                    f"Service {service.name} is type {service.type} but has no vmid"
+                )
+
+            # Add node as hint (cluster-safe: not authoritative)
+            if service.node is not None:
+                metadata["node"] = service.node
+            else:
+                metadata["node"] = None
+                self.logger.debug(
+                    f"Service {service.name} has no node specified"
+                )
+        else:
+            # Non-VM/LXC services don't have vmid or node
+            metadata["vmid"] = None
+            metadata["node"] = None
+
+        # Add PBS-specific details if using PBS backup
+        if backup_destination["method"] == "pbs":
+            pbs_config = backup_destination.get("pbs_config", {})
+            metadata["pbs_details"] = {
+                "server": pbs_config.get("server"),
+                "datastore": pbs_config.get("datastore"),
+                "username": pbs_config.get("username"),
+                # Don't include password for security
+            }
+            self.logger.debug(
+                f"Added PBS details for {service.name}: {pbs_config.get('server')}/{pbs_config.get('datastore')}"
+            )
+        else:
+            metadata["pbs_details"] = None
+
+        self.logger.debug(
+            f"Created backup metadata for {service.name}: method={metadata['backup_method']}, "
+            f"status={metadata['status']}"
+        )
+
+        return metadata
+
     def _perform_backup(
         self, service: ServiceConfig, destination: Dict[str, Any]
     ) -> bool:
