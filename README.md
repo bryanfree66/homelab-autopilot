@@ -156,6 +156,14 @@ Homelab Autopilot is an open-source automation framework that **unifies backup m
 - ✅ **Plugin architecture**—extend without forking
 - ✅ **Production-grade testing**—98% coverage, 10.0/10 pylint score
 
+### Cluster Support (Phases 3-6)
+- ✅ **Cluster-ready architecture from day one**—no breaking changes needed later
+- ✅ **Smart design**—query VM locations dynamically, support shared storage
+- ✅ **Rolling updates**—update cluster nodes safely one at a time (Phase 3)
+- ✅ **HA awareness**—respect high-availability during operations
+- ✅ **Full cluster features**—multi-node failover, auto-discovery (Phase 6)
+- 📝 **Even in Phase 2**: Service configs include `node` field, PBS works cluster-wide
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -315,13 +323,24 @@ More documentation coming as features are implemented!
 
 ### Phase 3: Update System 📅 PLANNED
 - [ ] Update engine with rollback
+- [ ] **Cluster-aware update orchestration** ⭐
+  - Rolling node updates (one at a time)
+  - VM migration before node updates
+  - Quorum checking and HA awareness
+  - Critical for multi-node Proxmox clusters
 - [ ] Service-specific update plugins
 - [ ] External validation
 
 ### Phase 4: Monitoring System 📅 PLANNED
 - [ ] Health check engine
-- [ ] Multiple check types
+- [ ] Multiple check types (HTTP, TCP, process, custom)
+- [ ] **Cluster health monitoring**
+  - Quorum status tracking
+  - Node reachability checks
+  - HA service status
+  - Cluster-wide resource monitoring
 - [ ] Recovery actions
+- [ ] Historical metrics and alerting
 
 ### Phase 5: CLI & Scheduling 📅 PLANNED
 - [ ] Command-line interface (click-based)
@@ -335,6 +354,12 @@ More documentation coming as features are implemented!
 - [ ] Dry-run mode for all operations
 
 ### Phase 6: Advanced Features 📅 PLANNED
+- [ ] **Full Proxmox Cluster Support** ⭐
+  - Auto-detect cluster topology
+  - Multi-node connection with failover
+  - Smart node selection (load balancing)
+  - Per-node storage configuration options
+  - Cluster-wide operation coordination
 - [ ] Web dashboard
 - [ ] Additional hypervisors (ESXi, KVM)
 - [ ] Multi-hypervisor discovery support

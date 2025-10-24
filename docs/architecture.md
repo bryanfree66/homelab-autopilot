@@ -11,6 +11,7 @@ Homelab Autopilot is built on these core principles:
 3. **Safety First** - Always backup before changes, easy rollback
 4. **Modular Design** - Use what you need, skip what you don't
 5. **Python + Bash** - Python for heavy lifting (config, logic, plugins), Bash for system orchestration
+6. **Cluster-Aware Design** - Build with single-node simplicity, support clusters later without breaking changes
 
 ## System Overview
 
@@ -1361,6 +1362,337 @@ For users to make informed decisions, we'll provide:
    - PBS hardware recommendations
    - Network design for backup traffic
    - Testing and validation procedures
+
+## Proxmox Cluster Support Strategy
+
+### Philosophy: Cluster-Ready from Day One
+
+Many homelabs run Proxmox clusters (2-3 nodes are common), but we don't want to over-engineer for clusters in early phases. Our strategy: **design decisions that don't limit future cluster support**, then add explicit cluster features in Phases 5-6.
+
+### How Proxmox Clusters Work
+
+**Key Cluster Characteristics**:
+- **Multiple nodes** share state via `/etc/pve` (pmxcfs distributed filesystem)
+- **Connect to any node** → Proxmox API provides cluster-wide visibility
+- **VMs can migrate** between nodes (live migration with shared storage)
+- **VMIDs are cluster-unique** (can't have VM 100 on two nodes)
+- **Quorum required** for cluster operations (typically 3 nodes or qdevice)
+- **PBS is cluster-aware** (single PBS instance serves entire cluster)
+
+### Current Architecture: Already Cluster-Aware! ✅
+
+Our Phase 1-2 design already preserves cluster support:
+
+#### 1. Service Config Has `node` Field
+```yaml
+services:
+  - name: nextcloud
+    type: vm
+    vmid: 200
+    node: pve1  # Node location specified
+    enabled: true
+    backup: true
+```
+
+This `node` field is critical for clusters—we already have it!
+
+#### 2. Single Connection Point Works
+```yaml
+global:
+  hypervisor:
+    type: proxmox
+    host: pve-cluster.local  # Any cluster node works
+    username: root@pam
+    password_command: "cat /secrets/pve_password"
+```
+
+**Why this works**: Proxmox API from any cluster node provides full cluster visibility. No need for multi-node connections in Phase 2.
+
+#### 3. PBS Integration is Naturally Cluster-Aware
+```yaml
+backup:
+  proxmox_backup_server:
+    enabled: true
+    server: 192.168.1.100
+    datastore: cluster-backups
+```
+
+PBS serves entire cluster—one datastore for all nodes. Our routing logic works perfectly.
+
+### Storage Considerations for Clusters
+
+| Storage Type | Cluster Support | Phase 2 Status |
+|--------------|-----------------|----------------|
+| **PBS** | ✅ Cluster-wide by design | Fully supported |
+| **Direct: Shared (NFS/Ceph)** | ✅ All nodes access same path | Fully supported |
+| **Direct: Local per-node** | ⚠️ Each node different path | Not supported (document limitation) |
+| **global.backup.root** | ✅ Can be shared or per-host | Works either way |
+
+**Phase 2 Requirement**: `direct_storage.path` must be shared storage accessible from all cluster nodes.
+
+### Cluster-Aware Design Patterns (By Phase)
+
+#### Phase 2 (Backup System) - Current ✅
+
+**What We're Doing Right**:
+- ✅ Service config includes `node` field
+- ✅ Single API connection (any node provides cluster visibility)
+- ✅ PBS integration works cluster-wide
+- ✅ Shared storage assumption documented
+
+**ProxmoxPlugin Requirements**:
+```python
+class ProxmoxPlugin(HypervisorPlugin):
+    def backup(self, service: ServiceConfig, destination: BackupDestination):
+        """
+        CRITICAL: Query actual VM location from API.
+        VMs can migrate, so don't trust service.node as current location.
+        """
+        # DON'T: Use service.node directly
+        # DO: Query actual location
+        actual_node = self._get_vm_current_node(service.vmid)
+        
+        # Use actual_node for backup operations
+        self._backup_vm(service.vmid, actual_node, destination)
+    
+    def _get_vm_current_node(self, vmid: int) -> str:
+        """
+        Query Proxmox cluster API for VM's current location.
+        
+        Returns:
+            str: Node name where VM is currently running (e.g., "pve2")
+        """
+        vm_status = self.proxmox.cluster.resources.get(
+            type='vm',
+            vmid=vmid
+        )
+        return vm_status[0]['node']
+```
+
+**Validation Rules**:
+```python
+def _validate_direct_storage_path(self, path: Path) -> None:
+    """
+    Warn if direct storage path looks node-local.
+    Cluster environments need shared storage.
+    """
+    if not str(path).startswith(('/mnt', '/nfs', '/ceph')):
+        logger.warning(
+            f"direct_storage path {path} may not be cluster-accessible. "
+            f"For clusters, use shared storage (NFS, Ceph, etc.)"
+        )
+```
+
+#### Phase 3 (Update System) - Critical for Clusters 🔄
+
+**Cluster-Specific Challenges**:
+- **Rolling node updates**: Update one node at a time
+- **VM migration**: Move VMs off node before updating
+- **HA awareness**: Don't break high-availability during updates
+- **Quorum preservation**: Never update too many nodes simultaneously
+
+**Update Engine Must**:
+```python
+class UpdateEngine:
+    def update_cluster_node(self, node: str):
+        """
+        Update single cluster node with safety checks.
+        
+        Process:
+        1. Check cluster quorum (need 50%+1 nodes online)
+        2. Migrate all VMs off this node
+        3. Wait for migrations to complete
+        4. Update node packages/kernel
+        5. Reboot if needed
+        6. Wait for node rejoin cluster
+        7. Verify cluster health
+        8. Move to next node
+        """
+        
+    def _check_cluster_quorum(self) -> bool:
+        """Verify cluster has quorum before node update"""
+        
+    def _migrate_vms_from_node(self, node: str) -> List[int]:
+        """Move all VMs to other nodes, return list of migrated VMIDs"""
+```
+
+This is where explicit cluster support becomes essential.
+
+#### Phase 4 (Monitoring) - Cluster Health 📊
+
+**Monitoring Additions**:
+- Cluster quorum status
+- Node reachability
+- HA service status
+- Fencing device status
+- Cluster-wide resource usage
+
+#### Phase 5/6 (Full Cluster Support) 🎯
+
+**Enhanced Configuration**:
+```yaml
+global:
+  hypervisor:
+    type: proxmox
+    cluster:
+      enabled: true
+      name: "homelab-cluster"
+      
+      # Multi-node connection with failover
+      nodes:
+        - host: pve1.local
+          priority: 1
+        - host: pve2.local
+          priority: 2
+        - host: pve3.local
+          priority: 3
+      
+      # Cluster-specific behavior
+      quorum_required: true
+      migrate_before_update: true
+      max_parallel_updates: 1
+      
+      # HA configuration
+      ha_aware: true
+      ha_manager: true
+
+# Per-node backup paths (if needed)
+backup:
+  direct_storage:
+    enabled: true
+    shared: false  # Enable per-node paths
+    node_paths:
+      pve1: /local/backups-pve1
+      pve2: /local/backups-pve2
+      pve3: /local/backups-pve3
+```
+
+**Cluster Discovery**:
+```python
+def discover_cluster(host: str) -> ClusterInfo:
+    """
+    Auto-detect Proxmox cluster configuration.
+    
+    Returns:
+        ClusterInfo with nodes, quorum status, HA config
+    """
+    cluster_status = proxmox.cluster.status.get()
+    
+    return ClusterInfo(
+        name=cluster_status['name'],
+        nodes=[node['name'] for node in cluster_status['nodes']],
+        quorum=cluster_status['quorum'],
+        ha_enabled=_check_ha_manager()
+    )
+```
+
+**Smart Node Selection**:
+```python
+def _select_optimal_node(self, vmid: int, operation: str) -> str:
+    """
+    Choose best node for operation.
+    
+    Preferences:
+    1. VM's current node (avoid unnecessary traffic)
+    2. Node with lowest load
+    3. Node with most free resources
+    """
+```
+
+### Cluster Support Checklist
+
+**Phase 2 (Backup System)** ✅:
+- [x] Service config has `node` field
+- [x] ProxmoxPlugin queries actual VM location
+- [x] Single connection point works cluster-wide
+- [x] PBS integration cluster-aware
+- [ ] Document shared storage requirement for direct_storage
+- [ ] Validate storage paths for cluster accessibility
+- [ ] Test with cluster setups (manual for now)
+
+**Phase 3 (Update System)** 🔄:
+- [ ] Rolling node update orchestration
+- [ ] VM migration before node updates
+- [ ] Quorum checking
+- [ ] HA awareness during updates
+
+**Phase 4 (Monitoring)** 📊:
+- [ ] Cluster health metrics
+- [ ] Node status monitoring
+- [ ] Quorum alerts
+
+**Phase 5/6 (Full Cluster)** 🎯:
+- [ ] Multi-node connection with failover
+- [ ] Cluster auto-discovery
+- [ ] Per-node storage configuration
+- [ ] Smart node selection
+- [ ] Cluster-specific validation
+
+### Testing Strategy
+
+**Without Physical Cluster** (Phases 2-4):
+1. **Single-node testing**: Verify no hardcoded assumptions
+2. **Code review**: Check for cluster-limiting patterns
+3. **Community testing**: Recruit beta testers with clusters
+4. **Simulation**: Mock Proxmox cluster API responses
+
+**With Community Clusters** (Phase 5+):
+1. **Beta testing program**: Recruit cluster users early
+2. **Diverse topologies**: 2-node, 3-node, 5-node clusters
+3. **Storage variations**: NFS, Ceph, local
+4. **HA scenarios**: Test with HA-enabled VMs
+
+### Anti-Patterns to Avoid
+
+**❌ DON'T**:
+- Hardcode single-node assumptions
+- Trust `service.node` as current VM location
+- Assume all nodes have same local paths
+- Skip quorum checks during operations
+- Update all nodes simultaneously
+
+**✅ DO**:
+- Query VM location from API dynamically
+- Assume shared storage for cluster scenarios
+- Validate cluster state before operations
+- Document cluster vs single-node differences
+- Design for backward compatibility
+
+### Cluster Support: Design Review Checklist
+
+For **every new feature**, ask:
+1. Does this assume single-node operation?
+2. Does this hardcode node names or paths?
+3. Does this trust config over API state?
+4. Does this work with shared storage?
+5. Does this handle VM migration?
+6. Can this be extended for clusters later?
+
+### Decision Matrix: Single-Node vs Cluster
+
+| Feature | Single-Node | Cluster | Design Choice |
+|---------|-------------|---------|---------------|
+| **API Connection** | Direct host | Any node works | ✅ Single connection sufficient |
+| **VM Location** | In config | Query from API | ✅ Always query API |
+| **Storage Path** | Can be local | Must be shared | ✅ Document requirement |
+| **PBS Integration** | Per-host | Cluster-wide | ✅ Works both ways |
+| **Updates** | Simple | Rolling + migration | ⚠️ Phase 3 complexity |
+| **Monitoring** | Single host | Cluster health | 📅 Phase 4 addition |
+| **Failover** | N/A | Multi-node connect | 📅 Phase 5 addition |
+
+### Documentation Requirements
+
+**Phase 2 User Docs**:
+- Explain `node` field usage
+- Document shared storage requirement
+- Show cluster config examples
+- Clarify cluster limitations in Phase 2
+
+**Phase 3+ User Docs**:
+- Cluster-specific update strategies
+- Rolling update procedures
+- HA considerations
+- Quorum requirements
 
 ## Future Architecture Improvements
 
