@@ -6,7 +6,10 @@ supporting multiple backup strategies including Proxmox Backup Server (PBS),
 direct storage, and file-based backups.
 """
 
+# pylint: disable=too-many-lines
+
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -272,6 +275,7 @@ class BackupEngine:
     # Backup Operations
     # ========================================================================
 
+    # pylint: disable=too-many-locals
     def _determine_backup_destination(self, service: ServiceConfig) -> Dict[str, Any]:
         """
         Determine where and how to backup based on configuration.
@@ -346,21 +350,21 @@ class BackupEngine:
                         "pbs_config": pbs_config,
                     }
 
-                except requests.exceptions.Timeout:
+                except requests.exceptions.Timeout as exc:
                     raise BackupError(
                         f"PBS connectivity check failed: Connection to {server}:{port} timed out after 5 seconds. "
                         f"Please verify the server is reachable and the configuration is correct."
-                    )
+                    ) from exc
                 except requests.exceptions.ConnectionError as e:
                     raise BackupError(
                         f"PBS connectivity check failed: Cannot connect to {server}:{port}. "
                         f"Error: {e}. Please verify the server address and network connectivity."
-                    )
+                    ) from e
                 except requests.exceptions.RequestException as e:
                     raise BackupError(
                         f"PBS connectivity check failed for {server}:{port}: {e}. "
                         f"Please verify the PBS server is running and accessible."
-                    )
+                    ) from e
 
             # 1b. Check direct storage next
             direct_config = backup_config.get("direct_storage")
@@ -373,8 +377,8 @@ class BackupEngine:
                 direct_path = direct_config.get("path")
                 if not direct_path:
                     raise BackupError(
-                        f"Direct storage is enabled but path is not configured. "
-                        f"Please set global.backup.direct_storage.path in your configuration."
+                        "Direct storage is enabled but path is not configured. "
+                        "Please set global.backup.direct_storage.path in your configuration."
                     )
 
                 # Cluster safety: Warn if path doesn't look like shared storage
@@ -418,6 +422,7 @@ class BackupEngine:
             "path": backup_root,
         }
 
+    # pylint: disable=too-many-branches
     def _create_backup_metadata(
         self,
         service: ServiceConfig,
@@ -540,11 +545,12 @@ class BackupEngine:
 
         return metadata
 
+    # pylint: disable=too-many-locals,too-many-statements
     def _execute_backup_command(
         self,
         service: ServiceConfig,
         backup_destination: Dict[str, Any],
-        backup_metadata: Dict[str, Any],
+        _backup_metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Execute the backup command based on the backup method.
@@ -678,10 +684,8 @@ class BackupEngine:
                     f"Unknown backup method '{method}' for service '{service.name}'"
                 )
 
-        except Exception as e:
-            # Catch all exceptions and return failure result
-            import traceback
-
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Catch all exceptions and return failure result (intentionally broad for safety)
             error_msg = (
                 f"Backup execution failed for service '{service.name}' using {method} method: {e}. "
                 f"Check logs for details."
