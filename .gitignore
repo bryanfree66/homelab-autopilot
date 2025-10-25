@@ -59,6 +59,7 @@ dmypy.json
 # Editor files
 .vscode/
 .idea/
+.cov_annotate/
 *.swp
 *.swo
 *~

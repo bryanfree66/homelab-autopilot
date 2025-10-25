@@ -6,6 +6,7 @@ supporting multiple backup strategies including Proxmox Backup Server (PBS),
 direct storage, and file-based backups.
 """
 
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -488,6 +489,177 @@ class BackupEngine:
         )
 
         return metadata
+
+    def _execute_backup_command(
+        self,
+        service: ServiceConfig,
+        backup_destination: Dict[str, Any],
+        backup_metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Execute the backup command based on the backup method.
+
+        This method coordinates the actual backup execution by delegating to the
+        appropriate plugin method based on the backup destination method (PBS,
+        direct storage, or local).
+
+        Args:
+            service: Service configuration
+            backup_destination: Output from _determine_backup_destination() containing:
+                - method: 'pbs' | 'direct' | 'local'
+                - path: Backup location path (for direct/local)
+                - pbs_config: PBS configuration (for pbs method)
+            backup_metadata: Output from _create_backup_metadata()
+
+        Returns:
+            Dict with backup execution result:
+                {
+                    'success': bool,
+                    'backup_path': Optional[Path],  # Final backup location
+                    'duration_seconds': float,  # For RTO metrics
+                    'error_message': Optional[str],  # If failed
+                }
+
+        Example:
+            >>> service = config.get_service_config("nextcloud")
+            >>> destination = engine._determine_backup_destination(service)
+            >>> metadata = engine._create_backup_metadata(service, destination)
+            >>> result = engine._execute_backup_command(service, destination, metadata)
+            >>> if result['success']:
+            ...     print(f"Backup created at {result['backup_path']}")
+        """
+        method = backup_destination["method"]
+        start_time = time.time()
+
+        # Initialize result dict
+        result: Dict[str, Any] = {
+            "success": False,
+            "backup_path": None,
+            "duration_seconds": 0.0,
+            "error_message": None,
+        }
+
+        # Handle dry run mode
+        if self.dry_run:
+            self.logger.info(
+                f"DRY RUN: Would execute {method} backup for service '{service.name}'"
+            )
+
+            # Simulate successful backup with mock duration
+            mock_duration = round(time.time() - start_time + 0.1, 2)
+
+            # For local/direct methods, generate what the path WOULD be
+            mock_path = None
+            if method == "local":
+                filename = self._generate_backup_filename(service.name, service.type)
+                mock_path = Path(backup_destination["path"]) / service.name / filename
+            elif method == "direct":
+                filename = self._generate_backup_filename(service.name, service.type)
+                mock_path = Path(backup_destination["path"]) / filename
+
+            return {
+                "success": True,
+                "backup_path": mock_path,
+                "duration_seconds": mock_duration,
+                "error_message": None,
+            }
+
+        # Log backup start
+        self.logger.info(
+            f"Starting {method} backup for service '{service.name}' (type: {service.type})"
+        )
+
+        try:
+            # Get plugin for service
+            plugin = self._get_plugin_for_service(service)
+
+            # Execute backup based on method
+            if method == "pbs":
+                # PBS backup: delegate to plugin
+                pbs_config = backup_destination["pbs_config"]
+                success = plugin.backup_to_pbs(service, pbs_config)
+
+                if success:
+                    result["success"] = True
+                    result["backup_path"] = None  # PBS stores internally
+                    self.logger.info(
+                        f"PBS backup completed for service '{service.name}'"
+                    )
+                else:
+                    result["error_message"] = (
+                        "PBS backup failed. Check PBS server logs for details."
+                    )
+                    self.logger.error(
+                        f"PBS backup failed for service '{service.name}'"
+                    )
+
+            elif method == "direct":
+                # Direct storage backup: plugin creates backup at specified path
+                storage_path = backup_destination["path"]
+                backup_path = plugin.backup_to_storage(service, storage_path)
+
+                result["success"] = True
+                result["backup_path"] = backup_path
+                self.logger.info(
+                    f"Direct storage backup completed for service '{service.name}' at {backup_path}"
+                )
+
+            elif method == "local":
+                # Local backup: generate filename and full path
+                filename = self._generate_backup_filename(service.name, service.type)
+                backup_dir = Path(backup_destination["path"]) / service.name
+
+                # Ensure backup directory exists
+                backup_dir.mkdir(parents=True, exist_ok=True)
+
+                backup_path = backup_dir / filename
+                plugin.backup(service, backup_path)
+
+                result["success"] = True
+                result["backup_path"] = backup_path
+                self.logger.info(
+                    f"Local backup completed for service '{service.name}' at {backup_path}"
+                )
+
+            else:
+                # Unknown method (should never happen due to validation)
+                result["error_message"] = (
+                    f"Unknown backup method '{method}'. This is a bug."
+                )
+                self.logger.error(
+                    f"Unknown backup method '{method}' for service '{service.name}'"
+                )
+
+        except Exception as e:
+            # Catch all exceptions and return failure result
+            import traceback
+
+            error_msg = (
+                f"Backup execution failed for service '{service.name}' using {method} method: {e}. "
+                f"Check logs for details."
+            )
+            result["error_message"] = error_msg
+
+            # Log with full traceback
+            self.logger.error(
+                f"Backup failed for service '{service.name}':\n{traceback.format_exc()}"
+            )
+
+        # Calculate duration
+        duration = round(time.time() - start_time, 2)
+        result["duration_seconds"] = duration
+
+        # Log completion
+        if result["success"]:
+            self.logger.info(
+                f"Backup completed for service '{service.name}' in {duration}s"
+            )
+        else:
+            self.logger.error(
+                f"Backup failed for service '{service.name}' after {duration}s: {result['error_message']}"
+            )
+
+        return result
 
     def _perform_backup(
         self, service: ServiceConfig, destination: Dict[str, Any]
