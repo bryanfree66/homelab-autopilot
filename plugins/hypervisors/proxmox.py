@@ -1,0 +1,96 @@
+"""
+Proxmox hypervisor plugin (stub implementation).
+
+This is a placeholder for the actual Proxmox plugin implementation.
+Actual implementation will be added in a later phase.
+"""
+
+from pathlib import Path
+from typing import Any, Dict
+
+from core.config_loader import ConfigLoader, ServiceConfig
+from lib.state_manager import StateManager
+from plugins.base import HypervisorPlugin
+
+
+class ProxmoxPlugin(HypervisorPlugin):
+    """
+    Proxmox hypervisor plugin for VM and LXC operations.
+
+    Handles backup, snapshot, and status operations for Proxmox VMs and containers.
+    """
+
+    def __init__(self, config: ConfigLoader, state: StateManager):
+        """
+        Initialize Proxmox plugin.
+
+        Args:
+            config: Configuration loader instance
+            state: State manager instance
+        """
+        # Store full config and state for later use
+        self.config_loader = config
+        self.state_manager = state
+
+        # Call parent with empty dict for now (base class expects dict)
+        super().__init__({})
+
+    @property
+    def name(self) -> str:
+        """Return the plugin name."""
+        return "ProxmoxPlugin"
+
+    def matches(self, target: Dict[str, Any]) -> bool:
+        """Check if this plugin handles the given service."""
+        service_type = target.get("type", "").lower()
+        return service_type in ["vm", "lxc"]
+
+    def backup(self, service: ServiceConfig, destination: Path) -> bool:
+        """Backup a VM or container."""
+        raise NotImplementedError("ProxmoxPlugin.backup() not yet implemented")
+
+    def backup_to_pbs(self, service: ServiceConfig, pbs_config: Dict[str, Any]) -> bool:
+        """
+        Backup to Proxmox Backup Server.
+
+        Args:
+            service: Service configuration
+            pbs_config: PBS configuration dict
+
+        Returns:
+            True if backup succeeded
+        """
+        raise NotImplementedError("ProxmoxPlugin.backup_to_pbs() not yet implemented")
+
+    def backup_to_storage(self, service: ServiceConfig, storage_path: Path) -> Path:
+        """
+        Backup to direct storage.
+
+        Args:
+            service: Service configuration
+            storage_path: Storage path
+
+        Returns:
+            Path to created backup file
+        """
+        raise NotImplementedError(
+            "ProxmoxPlugin.backup_to_storage() not yet implemented"
+        )
+
+    def create_snapshot(self, service: ServiceConfig, snapshot_name: str) -> bool:
+        """Create a snapshot."""
+        raise NotImplementedError("ProxmoxPlugin.create_snapshot() not yet implemented")
+
+    def restore_snapshot(self, service: ServiceConfig, snapshot_name: str) -> bool:
+        """Restore from snapshot."""
+        raise NotImplementedError(
+            "ProxmoxPlugin.restore_snapshot() not yet implemented"
+        )
+
+    def delete_snapshot(self, service: ServiceConfig, snapshot_name: str) -> bool:
+        """Delete a snapshot."""
+        raise NotImplementedError("ProxmoxPlugin.delete_snapshot() not yet implemented")
+
+    def get_status(self, service: ServiceConfig) -> Dict[str, Any]:
+        """Get VM/container status."""
+        raise NotImplementedError("ProxmoxPlugin.get_status() not yet implemented")

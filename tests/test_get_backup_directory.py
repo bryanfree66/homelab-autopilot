@@ -216,7 +216,7 @@ class TestGetBackupDirectory:
         # Should have helpful error message
         assert "Failed to create backup directory" in str(exc_info.value)
         assert "Permission denied" in str(exc_info.value)
-        
+
         # Should chain the original OSError
         assert isinstance(exc_info.value.__cause__, OSError)
 
@@ -335,9 +335,7 @@ services:
         assert backup_dir.exists()
         assert backup_dir == backup_root / "test"
 
-    def test_returns_same_path_as_config_root_plus_service(
-        self, backup_engine_temp
-    ):
+    def test_returns_same_path_as_config_root_plus_service(self, backup_engine_temp):
         """Test that returned path equals config_root / service_name."""
         engine, backup_root = backup_engine_temp
 

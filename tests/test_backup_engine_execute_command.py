@@ -239,9 +239,7 @@ class TestExecuteBackupCommandPBS:
     ):
         """Test PBS backup handles plugin exceptions gracefully."""
         mock_plugin = Mock()
-        mock_plugin.backup_to_pbs.side_effect = RuntimeError(
-            "PBS connection timeout"
-        )
+        mock_plugin.backup_to_pbs.side_effect = RuntimeError("PBS connection timeout")
 
         with patch.object(
             backup_engine, "_get_plugin_for_service", return_value=mock_plugin
@@ -297,9 +295,7 @@ class TestExecuteBackupCommandDirect:
     ):
         """Test direct storage backup handles exceptions."""
         mock_plugin = Mock()
-        mock_plugin.backup_to_storage.side_effect = OSError(
-            "Disk full"
-        )
+        mock_plugin.backup_to_storage.side_effect = OSError("Disk full")
 
         with patch.object(
             backup_engine, "_get_plugin_for_service", return_value=mock_plugin
@@ -407,9 +403,7 @@ class TestExecuteBackupCommandLocal:
     ):
         """Test local backup handles plugin exceptions."""
         mock_plugin = Mock()
-        mock_plugin.backup.side_effect = PermissionError(
-            "Permission denied"
-        )
+        mock_plugin.backup.side_effect = PermissionError("Permission denied")
 
         with patch.object(
             backup_engine, "_get_plugin_for_service", return_value=mock_plugin
@@ -623,9 +617,7 @@ class TestExecuteBackupCommandValidation:
                 docker_service, local_destination, mock_metadata
             )
 
-        assert result["backup_path"] is None or isinstance(
-            result["backup_path"], Path
-        )
+        assert result["backup_path"] is None or isinstance(result["backup_path"], Path)
 
     def test_error_message_is_string_or_none(
         self,

@@ -17,6 +17,8 @@ from core.config_loader import ConfigLoader, ServiceConfig
 from lib.logger import get_logger
 from lib.state_manager import StateManager
 from plugins.base import HypervisorPlugin, ServicePlugin
+from plugins.hypervisors.proxmox import ProxmoxPlugin
+from plugins.services.generic import GenericServicePlugin
 
 
 class BackupError(Exception):
@@ -106,9 +108,7 @@ class BackupEngine:
 
             backup_path = Path(backup_root)
             if not backup_path.is_absolute():
-                raise BackupError(
-                    f"Backup root path must be absolute: {backup_root}"
-                )
+                raise BackupError(f"Backup root path must be absolute: {backup_root}")
 
         except Exception as e:
             if isinstance(e, BackupError):
@@ -199,7 +199,61 @@ class BackupEngine:
             >>> plugin = engine._get_plugin_for_service(service)
             >>> print(plugin.name)
         """
-        raise NotImplementedError
+        # Validate service type
+        service_type = service.type
+        if not service_type:
+            raise ValueError(
+                f"Service '{service.name}' has no type defined. "
+                f"Service type is required for plugin selection."
+            )
+
+        service_type = service_type.lower()
+
+        # Check cache first
+        if service_type in self._plugin_cache:
+            self.logger.debug(f"Using cached plugin for service type '{service_type}'")
+            return self._plugin_cache[service_type]
+
+        # Define supported service types
+        hypervisor_types = ["vm", "lxc"]
+        service_types = ["docker", "systemd", "generic"]
+        supported_types = hypervisor_types + service_types
+
+        # Validate service type is supported
+        if service_type not in supported_types:
+            raise ValueError(
+                f"Unsupported service type '{service_type}' for service '{service.name}'. "
+                f"Supported types: {', '.join(supported_types)}"
+            )
+
+        # Instantiate appropriate plugin based on service type
+        plugin: Union[HypervisorPlugin, ServicePlugin]
+
+        if service_type in hypervisor_types:
+            # Use ProxmoxPlugin for VM/LXC types
+            self.logger.debug(
+                f"Instantiating ProxmoxPlugin for service type '{service_type}'"
+            )
+            plugin = ProxmoxPlugin(config=self.config, state=self.state)
+
+        elif service_type in service_types:
+            # Use GenericServicePlugin for Docker/systemd/generic types
+            self.logger.debug(
+                f"Instantiating GenericServicePlugin for service type '{service_type}'"
+            )
+            plugin = GenericServicePlugin(config=self.config, state=self.state)
+
+        else:
+            # Should never reach here due to validation above, but for safety
+            raise ValueError(
+                f"Unable to determine plugin for service type '{service_type}'"
+            )
+
+        # Cache the plugin
+        self._plugin_cache[service_type] = plugin
+        self.logger.debug(f"Cached {plugin.name} for service type '{service_type}'")
+
+        return plugin
 
     def _clear_plugin_cache(self) -> None:
         """
@@ -218,9 +272,7 @@ class BackupEngine:
     # Backup Operations
     # ========================================================================
 
-    def _determine_backup_destination(
-        self, service: ServiceConfig
-    ) -> Dict[str, Any]:
+    def _determine_backup_destination(self, service: ServiceConfig) -> Dict[str, Any]:
         """
         Determine where and how to backup based on configuration.
 
@@ -282,9 +334,7 @@ class BackupEngine:
                 try:
                     # Use a lightweight API endpoint to test connectivity
                     url = f"https://{server}:{port}/api2/json/version"
-                    response = requests.get(
-                        url, verify=verify_ssl, timeout=5
-                    )
+                    response = requests.get(url, verify=verify_ssl, timeout=5)
                     response.raise_for_status()
 
                     self.logger.info(
@@ -330,7 +380,9 @@ class BackupEngine:
                 # Cluster safety: Warn if path doesn't look like shared storage
                 path_str = str(direct_path)
                 shared_prefixes = ["/mnt", "/nfs", "/ceph"]
-                is_shared = any(path_str.startswith(prefix) for prefix in shared_prefixes)
+                is_shared = any(
+                    path_str.startswith(prefix) for prefix in shared_prefixes
+                )
 
                 if not is_shared:
                     self.logger.warning(
@@ -460,9 +512,7 @@ class BackupEngine:
                 metadata["node"] = service.node
             else:
                 metadata["node"] = None
-                self.logger.debug(
-                    f"Service {service.name} has no node specified"
-                )
+                self.logger.debug(f"Service {service.name} has no node specified")
         else:
             # Non-VM/LXC services don't have vmid or node
             metadata["vmid"] = None
@@ -589,9 +639,7 @@ class BackupEngine:
                     result["error_message"] = (
                         "PBS backup failed. Check PBS server logs for details."
                     )
-                    self.logger.error(
-                        f"PBS backup failed for service '{service.name}'"
-                    )
+                    self.logger.error(f"PBS backup failed for service '{service.name}'")
 
             elif method == "direct":
                 # Direct storage backup: plugin creates backup at specified path
@@ -751,26 +799,20 @@ class BackupEngine:
 
         # Check if directory exists (should always exist after _get_backup_directory)
         if not backup_dir.exists():
-            self.logger.warning(
-                f"Backup directory does not exist: {backup_dir}"
-            )
+            self.logger.warning(f"Backup directory does not exist: {backup_dir}")
             return []
 
         # Get all files (not directories) in backup directory
         try:
             files = [f for f in backup_dir.iterdir() if f.is_file()]
         except OSError as e:
-            self.logger.error(
-                f"Error reading backup directory {backup_dir}: {e}"
-            )
+            self.logger.error(f"Error reading backup directory {backup_dir}: {e}")
             return []
 
         # Sort by modification time (oldest first)
         files.sort(key=lambda f: f.stat().st_mtime)
 
-        self.logger.debug(
-            f"Found {len(files)} backup files for {service_name}"
-        )
+        self.logger.debug(f"Found {len(files)} backup files for {service_name}")
 
         return files
 

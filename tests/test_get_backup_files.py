@@ -381,9 +381,7 @@ class TestGetBackupFiles:
 
         assert files[0].is_absolute()
 
-    def test_permission_error_returns_empty_list(
-        self, backup_engine_temp, monkeypatch
-    ):
+    def test_permission_error_returns_empty_list(self, backup_engine_temp, monkeypatch):
         """Test that permission errors return empty list."""
         engine, backup_root = backup_engine_temp
 

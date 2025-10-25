@@ -144,9 +144,7 @@ class TestCreateBackupMetadataBasicFields:
 
     def test_vm_with_pbs_basic_fields(self, backup_engine, vm_service, pbs_destination):
         """Test VM with PBS includes all basic required fields."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         # Check required fields
         assert metadata["service_name"] == "test-vm"
@@ -189,9 +187,7 @@ class TestCreateBackupMetadataTimestamp:
 
     def test_timestamp_is_iso_format(self, backup_engine, vm_service, pbs_destination):
         """Test that timestamp is valid ISO 8601 format."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         timestamp = metadata["timestamp"]
 
@@ -202,9 +198,7 @@ class TestCreateBackupMetadataTimestamp:
     def test_timestamp_is_recent(self, backup_engine, vm_service, pbs_destination):
         """Test that timestamp is current (within last few seconds)."""
         before = datetime.now()
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
         after = datetime.now()
 
         timestamp = datetime.fromisoformat(metadata["timestamp"])
@@ -216,17 +210,14 @@ class TestCreateBackupMetadataTimestamp:
         self, backup_engine, vm_service, pbs_destination
     ):
         """Test that multiple calls generate different timestamps."""
-        metadata1 = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata1 = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         # Small delay
         import time
+
         time.sleep(0.01)
 
-        metadata2 = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata2 = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         # Timestamps should be different
         assert metadata1["timestamp"] != metadata2["timestamp"]
@@ -235,13 +226,9 @@ class TestCreateBackupMetadataTimestamp:
 class TestCreateBackupMetadataBackupPath:
     """Test backup_path and file_size_bytes handling."""
 
-    def test_no_backup_path_provided(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_no_backup_path_provided(self, backup_engine, vm_service, pbs_destination):
         """Test metadata when no backup_path is provided."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         assert metadata["backup_path"] is None
         assert metadata["file_size_bytes"] is None
@@ -340,19 +327,13 @@ class TestCreateBackupMetadataBackupPath:
 class TestCreateBackupMetadataDuration:
     """Test duration_seconds handling."""
 
-    def test_no_duration_provided(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_no_duration_provided(self, backup_engine, vm_service, pbs_destination):
         """Test metadata when no duration is provided."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         assert metadata["duration_seconds"] is None
 
-    def test_duration_provided(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_duration_provided(self, backup_engine, vm_service, pbs_destination):
         """Test metadata includes duration when provided."""
         metadata = backup_engine._create_backup_metadata(
             vm_service, pbs_destination, duration_seconds=45.2
@@ -360,9 +341,7 @@ class TestCreateBackupMetadataDuration:
 
         assert metadata["duration_seconds"] == 45.2
 
-    def test_duration_zero(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_duration_zero(self, backup_engine, vm_service, pbs_destination):
         """Test metadata with zero duration."""
         metadata = backup_engine._create_backup_metadata(
             vm_service, pbs_destination, duration_seconds=0.0
@@ -370,9 +349,7 @@ class TestCreateBackupMetadataDuration:
 
         assert metadata["duration_seconds"] == 0.0
 
-    def test_duration_very_large(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_duration_very_large(self, backup_engine, vm_service, pbs_destination):
         """Test metadata with very large duration."""
         metadata = backup_engine._create_backup_metadata(
             vm_service, pbs_destination, duration_seconds=3600.5
@@ -388,9 +365,7 @@ class TestCreateBackupMetadataVmLxcFields:
         self, backup_engine, vm_service, pbs_destination
     ):
         """Test VM metadata includes vmid and node."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         assert metadata["vmid"] == 200
         assert metadata["node"] == "pve"
@@ -399,16 +374,12 @@ class TestCreateBackupMetadataVmLxcFields:
         self, backup_engine, lxc_service, local_destination
     ):
         """Test LXC metadata includes vmid and node."""
-        metadata = backup_engine._create_backup_metadata(
-            lxc_service, local_destination
-        )
+        metadata = backup_engine._create_backup_metadata(lxc_service, local_destination)
 
         assert metadata["vmid"] == 100
         assert metadata["node"] == "pve-node2"
 
-    def test_vm_without_vmid_graceful_handling(
-        self, backup_engine, pbs_destination
-    ):
+    def test_vm_without_vmid_graceful_handling(self, backup_engine, pbs_destination):
         """Test VM with vmid=None (edge case, should handle gracefully)."""
         # Create service with vmid set to None (bypassing validation for test)
         service = ServiceConfig(
@@ -422,16 +393,12 @@ class TestCreateBackupMetadataVmLxcFields:
         # Manually set vmid to None to test graceful handling
         service.vmid = None
 
-        metadata = backup_engine._create_backup_metadata(
-            service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(service, pbs_destination)
 
         assert metadata["vmid"] is None
         assert metadata["node"] == "pve"
 
-    def test_vm_without_node_graceful_handling(
-        self, backup_engine, pbs_destination
-    ):
+    def test_vm_without_node_graceful_handling(self, backup_engine, pbs_destination):
         """Test VM with node=None (edge case, should handle gracefully)."""
         # Create service with node set to None (bypassing validation for test)
         service = ServiceConfig(
@@ -445,9 +412,7 @@ class TestCreateBackupMetadataVmLxcFields:
         # Manually set node to None to test graceful handling
         service.node = None
 
-        metadata = backup_engine._create_backup_metadata(
-            service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(service, pbs_destination)
 
         assert metadata["vmid"] == 300
         assert metadata["node"] is None
@@ -478,26 +443,18 @@ class TestCreateBackupMetadataVmLxcFields:
 class TestCreateBackupMetadataPbsDetails:
     """Test PBS-specific details."""
 
-    def test_pbs_includes_pbs_details(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_pbs_includes_pbs_details(self, backup_engine, vm_service, pbs_destination):
         """Test PBS backup includes pbs_details."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         assert metadata["pbs_details"] is not None
         assert metadata["pbs_details"]["server"] == "pbs.local"
         assert metadata["pbs_details"]["datastore"] == "homelab"
         assert metadata["pbs_details"]["username"] == "root@pam"
 
-    def test_pbs_details_no_password(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_pbs_details_no_password(self, backup_engine, vm_service, pbs_destination):
         """Test PBS details don't include password for security."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         # Password should NOT be in metadata
         assert "password" not in metadata["pbs_details"]
@@ -506,9 +463,7 @@ class TestCreateBackupMetadataPbsDetails:
         self, backup_engine, vm_service, direct_destination
     ):
         """Test direct storage backup has no pbs_details."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, direct_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, direct_destination)
 
         assert metadata["pbs_details"] is None
 
@@ -516,19 +471,13 @@ class TestCreateBackupMetadataPbsDetails:
         self, backup_engine, vm_service, local_destination
     ):
         """Test local backup has no pbs_details."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, local_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, local_destination)
 
         assert metadata["pbs_details"] is None
 
-    def test_pbs_details_structure(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_pbs_details_structure(self, backup_engine, vm_service, pbs_destination):
         """Test PBS details has correct structure."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         pbs_details = metadata["pbs_details"]
         assert isinstance(pbs_details, dict)
@@ -540,18 +489,19 @@ class TestCreateBackupMetadataPbsDetails:
 class TestCreateBackupMetadataStatus:
     """Test status field."""
 
-    def test_status_is_pending(
-        self, backup_engine, vm_service, pbs_destination
-    ):
+    def test_status_is_pending(self, backup_engine, vm_service, pbs_destination):
         """Test initial status is 'pending'."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         assert metadata["status"] == "pending"
 
     def test_status_always_pending_regardless_of_method(
-        self, backup_engine, vm_service, pbs_destination, direct_destination, local_destination
+        self,
+        backup_engine,
+        vm_service,
+        pbs_destination,
+        direct_destination,
+        local_destination,
     ):
         """Test status is always 'pending' regardless of backup method."""
         metadata_pbs = backup_engine._create_backup_metadata(
@@ -576,9 +526,7 @@ class TestCreateBackupMetadataJsonSerializable:
         self, backup_engine, vm_service, pbs_destination
     ):
         """Test PBS metadata can be serialized to JSON."""
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, pbs_destination)
 
         # Should not raise
         json_str = json.dumps(metadata)
@@ -650,9 +598,17 @@ class TestCreateBackupMetadataIntegration:
 
         # All expected fields should be present
         expected_fields = [
-            "service_name", "service_type", "backup_method", "timestamp",
-            "backup_path", "file_size_bytes", "duration_seconds",
-            "vmid", "node", "pbs_details", "status"
+            "service_name",
+            "service_type",
+            "backup_method",
+            "timestamp",
+            "backup_path",
+            "file_size_bytes",
+            "duration_seconds",
+            "vmid",
+            "node",
+            "pbs_details",
+            "status",
         ]
         for field in expected_fields:
             assert field in metadata
@@ -743,9 +699,7 @@ class TestCreateBackupMetadataEdgeCases:
             backup=True,
         )
 
-        metadata = backup_engine._create_backup_metadata(
-            service, local_destination
-        )
+        metadata = backup_engine._create_backup_metadata(service, local_destination)
 
         assert metadata["service_type"] == "generic"
         assert metadata["vmid"] is None
@@ -760,17 +714,13 @@ class TestCreateBackupMetadataEdgeCases:
             backup=True,
         )
 
-        metadata = backup_engine._create_backup_metadata(
-            service, local_destination
-        )
+        metadata = backup_engine._create_backup_metadata(service, local_destination)
 
         assert metadata["service_type"] == "host"
         assert metadata["vmid"] is None
         assert metadata["node"] is None
 
-    def test_service_name_with_special_characters(
-        self, backup_engine, pbs_destination
-    ):
+    def test_service_name_with_special_characters(self, backup_engine, pbs_destination):
         """Test service name with special characters."""
         service = ServiceConfig(
             name="my-service_v2.0",
@@ -780,9 +730,7 @@ class TestCreateBackupMetadataEdgeCases:
             backup=True,
         )
 
-        metadata = backup_engine._create_backup_metadata(
-            service, pbs_destination
-        )
+        metadata = backup_engine._create_backup_metadata(service, pbs_destination)
 
         assert metadata["service_name"] == "my-service_v2.0"
 
@@ -793,9 +741,7 @@ class TestCreateBackupMetadataEdgeCases:
             "pbs_config": {},
         }
 
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, destination)
 
         assert metadata["pbs_details"] is not None
         assert metadata["pbs_details"]["server"] is None
@@ -809,9 +755,7 @@ class TestCreateBackupMetadataEdgeCases:
             # Missing pbs_config key
         }
 
-        metadata = backup_engine._create_backup_metadata(
-            vm_service, destination
-        )
+        metadata = backup_engine._create_backup_metadata(vm_service, destination)
 
         # Should handle gracefully with empty dict
         assert metadata["pbs_details"] is not None

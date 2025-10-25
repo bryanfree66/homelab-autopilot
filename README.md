@@ -67,17 +67,20 @@ Homelab Autopilot is an open-source automation framework that **unifies backup m
   - ServicePlugin for application-level operations
   - NotificationPlugin for alerts and notifications
 
-**Phase 2 Backup System - 🔄 IN PROGRESS (~25% complete, 78 tests)**
+**Phase 2 Backup System - 🔄 IN PROGRESS (~47% complete, 229 tests)**
 
-- 🔄 **Backup Engine** (5/19 methods complete)
+- 🔄 **Backup Engine** (9/19 methods complete)
   - ✅ Configuration retrieval and caching
   - ✅ Timestamped backup filename generation
   - ✅ Service backup directory management
   - ✅ Backup file listing and sorting
   - ✅ Retention policy enforcement
-  - 🔄 Backup destination routing (PBS → direct → local)
-  - 🔄 Plugin orchestration and service backup
+  - ✅ Backup destination routing (PBS → direct → local)
+  - ✅ Backup metadata generation with RTO tracking
+  - ✅ Core backup command execution with duration tracking
+  - ✅ Plugin routing and caching
   - 🔄 Backup verification and state tracking
+  - 🔄 Service-level backup orchestration
   - 🔄 Notification integration
 
 - 🔄 **Storage Backend Architecture**
@@ -390,7 +393,7 @@ Key principles:
 ## 📊 Project Status
 
 **Current Version**: 0.2.0-alpha  
-**Development Phase**: Phase 2 🔄 IN PROGRESS (~25% complete)
+**Development Phase**: Phase 2 🔄 IN PROGRESS (~47% complete)
 
 **Phase 1 Complete** ✅:
 - ConfigLoader: 95% (50 tests)
@@ -401,15 +404,19 @@ Key principles:
 - **Phase 1 Total: 98%** (195 tests passing)
 
 **Phase 2 In Progress** 🔄:
-- BackupEngine: 5/19 methods (78 tests)
+- BackupEngine: 9/19 methods (229 tests)
   - ✅ Config retrieval, filename generation, directory management
-  - ✅ File listing, retention policy
-  - 🔄 Next: Backup destination routing, plugin orchestration
+  - ✅ File listing, retention policy enforcement
+  - ✅ Backup destination routing (PBS/direct/local with connectivity checks)
+  - ✅ Metadata generation with RTO tracking
+  - ✅ Core backup execution with duration tracking
+  - ✅ Plugin routing and caching
+  - 🔄 Next: Backup verification, state tracking, orchestration
 - Storage Backends: Architecture designed, implementation pending
 - Restore Testing: Architecture designed (Phase 3)
-- Plugins: Coming next (Proxmox, Generic Service, Email)
+- Plugins: Placeholder implementations (ProxmoxPlugin, GenericServicePlugin)
 
-**Overall Test Coverage**: 98% (273 tests passing)  
+**Overall Test Coverage**: 95% (424 tests passing)  
 **Production Ready**: No - Alpha development (Phase 2 active)
 
 ## 📄 License

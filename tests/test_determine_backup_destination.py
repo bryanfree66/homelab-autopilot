@@ -696,9 +696,7 @@ class TestDetermineBackupDestinationLocalFallback:
             assert result["method"] == "local"
             assert result["path"] == Path("/mnt/backups")
 
-    def test_lxc_no_pbs_no_direct_falls_back_to_local(
-        self, backup_engine, lxc_service
-    ):
+    def test_lxc_no_pbs_no_direct_falls_back_to_local(self, backup_engine, lxc_service):
         """Test LXC with neither PBS nor direct storage falls back to local."""
         mock_config = {
             "enabled": True,

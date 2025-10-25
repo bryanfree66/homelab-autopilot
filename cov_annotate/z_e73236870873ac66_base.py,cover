@@ -1,0 +1,417 @@
+> """
+> Base classes for the plugin system.
+  
+> This module defines the abstract base classes that all plugins must inherit from.
+> Plugins provide extensibility for hypervisors, services, and notifications.
+> """
+  
+> from abc import ABC, abstractmethod
+> from pathlib import Path
+> from typing import Any, Dict, Optional
+  
+  # Forward reference for type hints (actual import happens in implementing plugins)
+> try:
+>     from core.config_loader import ServiceConfig
+! except ImportError:
+      # For type checking when core module not yet available
+!     ServiceConfig = Any
+  
+  
+> class PluginBase(ABC):
+>     """
+>     Abstract base class for all plugins.
+  
+>     All plugins must inherit from this class and implement the matches() method.
+>     Plugins receive configuration during initialization and use it to determine
+>     if they can handle specific targets.
+>     """
+  
+>     def __init__(self, config: Dict[str, Any]):
+>         """
+>         Initialize the plugin with configuration.
+  
+>         Args:
+>             config: Plugin configuration dictionary
+>         """
+>         self.config = config
+  
+>     @property
+>     @abstractmethod
+>     def name(self) -> str:
+>         """
+>         Return the plugin name.
+  
+>         Returns:
+>             Human-readable plugin name
+>         """
+  
+>     @abstractmethod
+>     def matches(self, target: Dict[str, Any]) -> bool:
+>         """
+>         Check if this plugin can handle the given target.
+  
+>         Args:
+>             target: Target configuration (e.g., service config, hypervisor config)
+  
+>         Returns:
+>             True if this plugin handles the target, False otherwise
+>         """
+  
+  
+> class HypervisorPlugin(PluginBase):
+>     """
+>     Abstract base class for hypervisor plugins.
+  
+>     Hypervisor plugins handle VM/container operations like backups, snapshots,
+>     and resource management. Examples: Proxmox, ESXi, KVM.
+  
+>     The plugin receives the global hypervisor configuration and service-specific
+>     configuration to perform operations.
+>     """
+  
+>     @abstractmethod
+>     def backup(self, service: "ServiceConfig", destination: Path) -> bool:
+>         """
+>         Backup a VM or container.
+  
+>         Args:
+>             service: Service configuration (must have vmid and node for Proxmox)
+>             destination: Backup destination path
+  
+>         Returns:
+>             True if backup succeeded, False otherwise
+>         """
+  
+>     @abstractmethod
+>     def create_snapshot(self, service: "ServiceConfig", snapshot_name: str) -> bool:
+>         """
+>         Create a snapshot of a VM or container.
+  
+>         Args:
+>             service: Service configuration
+>             snapshot_name: Name for the snapshot
+  
+>         Returns:
+>             True if snapshot created successfully, False otherwise
+>         """
+  
+>     @abstractmethod
+>     def restore_snapshot(self, service: "ServiceConfig", snapshot_name: str) -> bool:
+>         """
+>         Restore a VM or container from a snapshot.
+  
+>         Args:
+>             service: Service configuration
+>             snapshot_name: Name of the snapshot to restore
+  
+>         Returns:
+>             True if restore succeeded, False otherwise
+>         """
+  
+>     @abstractmethod
+>     def delete_snapshot(self, service: "ServiceConfig", snapshot_name: str) -> bool:
+>         """
+>         Delete a snapshot.
+  
+>         Args:
+>             service: Service configuration
+>             snapshot_name: Name of the snapshot to delete
+  
+>         Returns:
+>             True if deletion succeeded, False otherwise
+>         """
+  
+>     @abstractmethod
+>     def get_status(self, service: "ServiceConfig") -> Dict[str, Any]:
+>         """
+>         Get the current status of a VM or container.
+  
+>         Args:
+>             service: Service configuration
+  
+>         Returns:
+>             Dictionary with status information (e.g., running, stopped, cpu, memory)
+>         """
+  
+>     def matches(self, target: Dict[str, Any]) -> bool:
+>         """
+>         Check if this hypervisor plugin can handle the given service.
+  
+>         For Proxmox: handles services of type 'vm' or 'lxc'
+>         For ESXi: would handle services of type 'vm'
+>         For Docker: would handle services of type 'docker'
+  
+>         Args:
+>             target: Service configuration (typically a ServiceConfig object or dict)
+  
+>         Returns:
+>             True if this plugin handles this service type
+  
+>         Note:
+>             Subclasses should override this method.
+>             Example for Proxmox: return target.type in ["vm", "lxc"]
+>         """
+          # pylint: disable=unused-argument
+!         return False
+  
+  
+> class ServicePlugin(PluginBase):
+>     """
+>     Abstract base class for service plugins.
+  
+>     Service plugins handle application-level operations like configuration backups,
+>     updates, and health checks. Examples: Docker containers, systemd services,
+>     generic applications.
+  
+>     Unlike HypervisorPlugin (which handles VMs/LXCs at the infrastructure level),
+>     ServicePlugin operates at the application/service level.
+>     """
+  
+>     @abstractmethod
+>     def backup(self, service: "ServiceConfig", destination: Path) -> bool:
+>         """
+>         Backup service configuration and data.
+  
+>         This typically includes:
+>         - Configuration files
+>         - Application data directories
+>         - Docker volumes or systemd service files
+  
+>         Args:
+>             service: Service configuration
+>             destination: Backup destination path
+  
+>         Returns:
+>             True if backup succeeded, False otherwise
+  
+>         Example:
+>             For Docker: backup volumes and compose files
+>             For systemd: backup service files and application config
+>         """
+  
+>     @abstractmethod
+>     def update(self, service: "ServiceConfig") -> bool:
+>         """
+>         Update the service to the latest version.
+  
+>         This typically includes:
+>         - Pulling new Docker images
+>         - Running package manager updates (apt, dnf, etc.)
+>         - Restarting the service
+  
+>         Args:
+>             service: Service configuration
+  
+>         Returns:
+>             True if update succeeded, False otherwise
+  
+>         Note:
+>             Caller should create backups/snapshots before calling this method.
+>         """
+  
+>     @abstractmethod
+>     def validate(self, service: "ServiceConfig") -> bool:
+>         """
+>         Validate that the service is working correctly after an update.
+  
+>         This typically includes:
+>         - Check if service is running
+>         - Verify service responds to health checks
+>         - Test basic functionality
+  
+>         Args:
+>             service: Service configuration
+  
+>         Returns:
+>             True if service is healthy, False otherwise
+  
+>         Example:
+>             For web services: check HTTP response
+>             For databases: verify connection and basic query
+>         """
+  
+>     @abstractmethod
+>     def rollback(self, service: "ServiceConfig") -> bool:
+>         """
+>         Rollback service to previous version (optional, may not be supported).
+  
+>         This typically includes:
+>         - Restore from backup
+>         - Revert to previous Docker image tag
+>         - Restart service
+  
+>         Args:
+>             service: Service configuration
+  
+>         Returns:
+>             True if rollback succeeded, False if not supported or failed
+  
+>         Note:
+>             Not all service types support rollback. Return False if unsupported.
+>         """
+  
+>     @abstractmethod
+>     def get_status(self, service: "ServiceConfig") -> Dict[str, Any]:
+>         """
+>         Get the current status of the service.
+  
+>         Args:
+>             service: Service configuration
+  
+>         Returns:
+>             Dictionary with status information (e.g., running, uptime, health)
+  
+>         Example return:
+>             {
+>                 "running": True,
+>                 "healthy": True,
+>                 "uptime": 3600,
+>                 "version": "1.2.3",
+>                 "error": None
+>             }
+>         """
+  
+>     def matches(self, target: Dict[str, Any]) -> bool:
+>         """
+>         Check if this service plugin can handle the given service.
+  
+>         For Docker plugin: handles services of type 'docker'
+>         For systemd plugin: handles services of type 'systemd'
+>         For generic plugin: handles services of type 'generic'
+  
+>         Args:
+>             target: Service configuration (typically a ServiceConfig object or dict)
+  
+>         Returns:
+>             True if this plugin handles this service type
+  
+>         Note:
+>             Subclasses should override this method.
+>             Example for Docker: return target.type == "docker"
+>         """
+          # pylint: disable=unused-argument
+!         return False
+  
+  
+> class NotificationPlugin(PluginBase):
+>     """
+>     Abstract base class for notification plugins.
+  
+>     Notification plugins handle sending alerts and status updates through various
+>     channels. Examples: Email, Slack, Discord, webhooks.
+  
+>     Notifications are sent for:
+>     - Backup success/failure
+>     - Update success/failure/rollback
+>     - Monitoring alerts
+>     - System errors
+>     """
+  
+>     @abstractmethod
+>     def send_notification(
+>         self,
+>         title: str,
+>         message: str,
+>         level: str = "info",
+>         metadata: Optional[Dict[str, Any]] = None,
+>     ) -> bool:
+>         """
+>         Send a notification through this channel.
+  
+>         Args:
+>             title: Notification title/subject
+>             message: Notification body/content
+>             level: Severity level - "info", "warning", "error", "success"
+>             metadata: Optional additional data (e.g., service name, timestamp)
+  
+>         Returns:
+>             True if notification sent successfully, False otherwise
+  
+>         Example:
+>             send_notification(
+>                 title="Backup Completed",
+>                 message="Successfully backed up 5 services",
+>                 level="success",
+>                 metadata={"service_count": 5, "duration": 120}
+>             )
+>         """
+  
+>     @abstractmethod
+>     def test_connection(self) -> bool:
+>         """
+>         Test if the notification channel is configured correctly.
+  
+>         Returns:
+>             True if connection test succeeded, False otherwise
+  
+>         Example:
+>             For Email: Try sending a test email
+>             For Slack: Try posting to channel
+>             For Webhook: Try sending a test payload
+>         """
+  
+>     def matches(self, target: Dict[str, Any]) -> bool:
+>         """
+>         Check if this notification plugin handles the given config.
+  
+>         Args:
+>             target: Notification configuration (typically NotificationConfig.model_dump())
+  
+>         Returns:
+>             True if this plugin handles this notification type
+  
+>         Note:
+>             Subclasses should override this method.
+>             Example for Email: return target.get("type") == "email"
+>         """
+          # pylint: disable=unused-argument
+!         return False
+  
+>     def format_message(
+>         self,
+>         title: str,
+>         message: str,
+>         level: str,
+>         metadata: Optional[Dict[str, Any]] = None,
+>     ) -> str:
+>         """
+>         Format the message for this notification channel (helper method).
+  
+>         Subclasses can override this to provide channel-specific formatting
+>         (e.g., Markdown for Slack, HTML for Email).
+  
+>         Args:
+>             title: Notification title
+>             message: Notification message
+>             level: Severity level
+>             metadata: Optional metadata
+  
+>         Returns:
+>             Formatted message string
+>         """
+          # pylint: disable=unused-argument
+          # Default implementation: plain text
+!         formatted = f"{title}\n\n{message}"
+!         if metadata:
+!             formatted += "\n\nDetails:\n"
+!             for key, value in metadata.items():
+!                 formatted += f"  {key}: {value}\n"
+!         return formatted
+  
+>     def get_emoji_for_level(self, level: str) -> str:
+>         """
+>         Get emoji/icon for notification level (helper method).
+  
+>         Args:
+>             level: Severity level
+  
+>         Returns:
+>             Emoji string for the level
+>         """
+!         emojis = {
+!             "success": "✅",
+!             "info": "ℹ️",
+!             "warning": "⚠️",
+!             "error": "❌",
+!         }
+!         return emojis.get(level.lower(), "📢")

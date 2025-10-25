@@ -907,7 +907,7 @@ class TestProxmoxBackupServerConfig:
         """Test loading config with PBS enabled."""
         loader = ConfigLoader(valid_config_pbs_path)
         assert loader.validate()
-        
+
         pbs_config = loader.get("global.backup.proxmox_backup_server")
         assert pbs_config is not None
         assert pbs_config.enabled is True
@@ -939,10 +939,10 @@ global:
     settings: {}
 """
         )
-        
+
         with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
-        
+
         errors = exc_info.value.__cause__.errors()
         assert any("port" in str(e).lower() for e in errors)
 
@@ -980,7 +980,7 @@ services:
     node: pve
 """
         )
-        
+
         # Should not raise - password_command is valid auth
         loader = ConfigLoader(config_file)
         assert loader.validate()
@@ -1013,7 +1013,7 @@ services:
     node: pve
 """
         )
-        
+
         # Should not raise - disabled PBS doesn't need password
         loader = ConfigLoader(config_file)
         assert loader.validate()
@@ -1026,7 +1026,7 @@ class TestDirectStorageConfig:
         """Test loading config with direct storage enabled."""
         loader = ConfigLoader(valid_config_direct_path)
         assert loader.validate()
-        
+
         direct_config = loader.get("global.backup.direct_storage")
         assert direct_config is not None
         assert direct_config.enabled is True
@@ -1037,7 +1037,7 @@ class TestDirectStorageConfig:
         """Test direct storage path must be absolute."""
         with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(invalid_direct_config_path)
-        
+
         errors = exc_info.value.__cause__.errors()
         assert any("absolute" in str(e).lower() for e in errors)
 
@@ -1062,10 +1062,10 @@ global:
     settings: {}
 """
         )
-        
+
         with pytest.raises(ConfigError) as exc_info:
             ConfigLoader(config_file)
-        
+
         errors = exc_info.value.__cause__.errors()
         assert any("format" in str(e).lower() for e in errors)
 
@@ -1096,7 +1096,7 @@ services:
     node: pve
 """
         )
-        
+
         # Should not raise - tar is valid format
         loader = ConfigLoader(config_file)
         assert loader.validate()
@@ -1110,11 +1110,11 @@ class TestHybridBackupConfig:
         """Test loading config with both PBS and direct storage."""
         loader = ConfigLoader(valid_config_hybrid_path)
         assert loader.validate()
-        
+
         # Both should be present
         pbs_config = loader.get("global.backup.proxmox_backup_server")
         direct_config = loader.get("global.backup.direct_storage")
-        
+
         assert pbs_config is not None
         assert pbs_config.enabled is True
         assert direct_config is not None
@@ -1143,7 +1143,7 @@ services:
     node: pve
 """
         )
-        
+
         # Should not raise - both PBS and direct_storage are optional
         loader = ConfigLoader(config_file)
         assert loader.validate()
@@ -1177,7 +1177,7 @@ services:
     backup: true
 """
         )
-        
+
         # Should not raise - host is valid service type
         loader = ConfigLoader(config_file)
         assert loader.validate()
@@ -1210,7 +1210,7 @@ services:
       - /etc/custom/
 """
         )
-        
+
         loader = ConfigLoader(config_file)
         assert loader.validate()
         service = loader.get_service_config("proxmox-host-config")
@@ -1239,7 +1239,7 @@ services:
     backup: true
 """
         )
-        
+
         loader = ConfigLoader(config_file)
         assert loader.validate()
         service = loader.get_service_config("proxmox-host-config")
@@ -1267,7 +1267,7 @@ services:
     # No vmid or node required for host type
 """
         )
-        
+
         # Should not raise - host type doesn't need Proxmox fields
         loader = ConfigLoader(config_file)
         assert loader.validate()
@@ -1280,16 +1280,16 @@ class TestPhase2ConfigIntegration:
         """Test complete PBS configuration from fixture."""
         loader = ConfigLoader(valid_config_pbs_path)
         assert loader.validate()
-        
+
         # Check all services load correctly
         services = loader.get_all_services()
         assert len(services) == 4  # host, lxc, vm, systemd
-        
+
         # Check host service
         host_service = loader.get_service_config("proxmox-host-config")
         assert host_service.type == "host"
         assert host_service.backup is True
-        
+
         # Check VM service
         nextcloud = loader.get_service_config("nextcloud")
         assert nextcloud.type == "vm"
@@ -1299,13 +1299,12 @@ class TestPhase2ConfigIntegration:
         """Test complete direct storage configuration from fixture."""
         loader = ConfigLoader(valid_config_direct_path)
         assert loader.validate()
-        
+
         # Verify direct storage settings
         direct = loader.get("global.backup.direct_storage")
         assert direct.enabled is True
         assert str(direct.path) == "/mnt/nfs/backups"
-        
+
         # Verify services
         services = loader.get_all_services()
         assert len(services) == 2  # lxc, vm
-
