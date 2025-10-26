@@ -156,7 +156,7 @@
 >             TypeError: If value type is not supported
 >         """
 >         if value is None:
-!             return ("null", "none")
+>             return ("null", "none")
 >         elif isinstance(value, bool):
               # Must check bool before int (bool is subclass of int)
 !             return (str(value), "bool")
@@ -188,7 +188,7 @@
 >             ValueError: If deserialization fails
 >         """
 >         if type_name == "none":
-!             return None
+>             return None
 >         elif type_name == "bool":
 !             return value_str == "True"
 >         elif type_name == "int":

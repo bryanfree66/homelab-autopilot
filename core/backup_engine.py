@@ -10,7 +10,7 @@ direct storage, and file-based backups.
 
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
@@ -828,32 +828,96 @@ class BackupEngine:
         self,
         service_name: str,
         success: bool,
-        backup_path: Optional[Path] = None,
+        backup_path: Optional[str] = None,
+        duration: Optional[float] = None,
         error_message: Optional[str] = None,
     ) -> None:
         """
-        Update state database with backup information.
+        Update backup state after a backup operation completes.
 
         Tracks:
         - last_backup.{service_name}: ISO timestamp
         - backup_status.{service_name}: "success" or "failed"
-        - backup_path.{service_name}: Path to latest backup
-        - backup_error.{service_name}: Error message (if failed)
+        - backup_path.{service_name}: Path to latest backup (success only)
+        - backup_duration.{service_name}: Duration in seconds (success only)
+        - backup_error.{service_name}: Error message (failure only)
 
         Args:
-            service_name: Service name
-            success: Whether backup succeeded
+            service_name: Name of the service that was backed up
+            success: Whether the backup succeeded
             backup_path: Path to backup file (if successful)
+            duration: Backup duration in seconds (if available)
             error_message: Error message (if failed)
+
+        Raises:
+            ValueError: If service_name is empty or invalid
+            StateError: If state manager update fails
 
         Example:
             >>> engine._update_backup_state(
             ...     "nextcloud",
             ...     True,
-            ...     Path("/mnt/backups/nextcloud_20250124_120000_vm.tar.gz")
+            ...     backup_path="/mnt/backups/nextcloud_20250124_120000_vm.tar.gz",
+            ...     duration=45.2
             ... )
         """
-        raise NotImplementedError
+        # Validate input
+        if not service_name or not isinstance(service_name, str):
+            raise ValueError(
+                f"Service name must be a non-empty string, got: {service_name!r}"
+            )
+
+        if not service_name.strip():
+            raise ValueError("Service name cannot be empty or whitespace only")
+
+        # Generate current timestamp
+        current_timestamp = datetime.now(timezone.utc).isoformat()
+
+        # Determine status string
+        status = "success" if success else "failed"
+
+        # Log the update
+        if success:
+            log_msg = (
+                f"Updating backup state for '{service_name}': {status}"
+                f"{f' (duration: {duration}s)' if duration is not None else ''}"
+            )
+        else:
+            log_msg = (
+                f"Updating backup state for '{service_name}': {status}"
+                f"{f' (error: {error_message})' if error_message else ''}"
+            )
+        self.logger.info(log_msg)
+
+        try:
+            # Always update timestamp and status
+            self.state.set(f"last_backup.{service_name}", current_timestamp)
+            self.state.set(f"backup_status.{service_name}", status)
+
+            if success:
+                # Success: Update path and duration if provided, clear error
+                if backup_path:
+                    self.state.set(f"backup_path.{service_name}", backup_path)
+                if duration is not None:
+                    self.state.set(f"backup_duration.{service_name}", str(duration))
+                # Clear any previous error
+                self.state.set(f"backup_error.{service_name}", None)
+            else:
+                # Failure: Set error if provided, clear path and duration
+                if error_message:
+                    self.state.set(f"backup_error.{service_name}", error_message)
+                # Clear path and duration (failed backup = no valid backup)
+                self.state.set(f"backup_path.{service_name}", None)
+                self.state.set(f"backup_duration.{service_name}", None)
+
+            self.logger.debug(f"Successfully updated backup state for '{service_name}'")
+
+        except Exception as e:
+            error_msg = (
+                f"Failed to update backup state for service '{service_name}': {e}"
+            )
+            self.logger.error(error_msg)
+            raise StateError(error_msg) from e
 
     def get_last_backup_time(self, service_name: str) -> Optional[str]:
         """
