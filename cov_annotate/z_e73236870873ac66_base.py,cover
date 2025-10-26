@@ -33,7 +33,7 @@
 >         Args:
 >             config: Plugin configuration dictionary
 >         """
->         self.config = config
+!         self.config = config
   
 >     @property
 >     @abstractmethod

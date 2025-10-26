@@ -6,7 +6,10 @@
 > direct storage, and file-based backups.
 > """
   
+  # pylint: disable=too-many-lines
+  
 > import time
+> import traceback
 > from datetime import datetime
 > from pathlib import Path
 > from typing import Any, Dict, Optional, Union
@@ -15,7 +18,7 @@
   
 > from core.config_loader import ConfigLoader, ServiceConfig
 > from lib.logger import get_logger
-> from lib.state_manager import StateManager
+> from lib.state_manager import StateError, StateManager
 > from plugins.base import HypervisorPlugin, ServicePlugin
 > from plugins.hypervisors.proxmox import ProxmoxPlugin
 > from plugins.services.generic import GenericServicePlugin
@@ -108,9 +111,7 @@
   
 >             backup_path = Path(backup_root)
 >             if not backup_path.is_absolute():
-!                 raise BackupError(
-!                     f"Backup root path must be absolute: {backup_root}"
-!                 )
+!                 raise BackupError(f"Backup root path must be absolute: {backup_root}")
   
 !         except Exception as e:
 !             if isinstance(e, BackupError):
@@ -202,50 +203,48 @@
 >             >>> print(plugin.name)
 >         """
           # Validate service type
->         service_type = service.type
->         if not service_type:
->             raise ValueError(
->                 f"Service '{service.name}' has no type defined. "
->                 f"Service type is required for plugin selection."
->             )
+!         service_type = service.type
+!         if not service_type:
+!             raise ValueError(
+!                 f"Service '{service.name}' has no type defined. "
+!                 f"Service type is required for plugin selection."
+!             )
   
->         service_type = service_type.lower()
+!         service_type = service_type.lower()
   
           # Check cache first
->         if service_type in self._plugin_cache:
->             self.logger.debug(
->                 f"Using cached plugin for service type '{service_type}'"
->             )
->             return self._plugin_cache[service_type]
+!         if service_type in self._plugin_cache:
+!             self.logger.debug(f"Using cached plugin for service type '{service_type}'")
+!             return self._plugin_cache[service_type]
   
           # Define supported service types
->         hypervisor_types = ["vm", "lxc"]
->         service_types = ["docker", "systemd", "generic"]
->         supported_types = hypervisor_types + service_types
+!         hypervisor_types = ["vm", "lxc"]
+!         service_types = ["docker", "systemd", "generic"]
+!         supported_types = hypervisor_types + service_types
   
           # Validate service type is supported
->         if service_type not in supported_types:
->             raise ValueError(
->                 f"Unsupported service type '{service_type}' for service '{service.name}'. "
->                 f"Supported types: {', '.join(supported_types)}"
->             )
+!         if service_type not in supported_types:
+!             raise ValueError(
+!                 f"Unsupported service type '{service_type}' for service '{service.name}'. "
+!                 f"Supported types: {', '.join(supported_types)}"
+!             )
   
           # Instantiate appropriate plugin based on service type
->         plugin: Union[HypervisorPlugin, ServicePlugin]
+!         plugin: Union[HypervisorPlugin, ServicePlugin]
   
->         if service_type in hypervisor_types:
+!         if service_type in hypervisor_types:
               # Use ProxmoxPlugin for VM/LXC types
->             self.logger.debug(
->                 f"Instantiating ProxmoxPlugin for service type '{service_type}'"
->             )
->             plugin = ProxmoxPlugin(config=self.config, state=self.state)
+!             self.logger.debug(
+!                 f"Instantiating ProxmoxPlugin for service type '{service_type}'"
+!             )
+!             plugin = ProxmoxPlugin(config=self.config, state=self.state)
   
->         elif service_type in service_types:
+!         elif service_type in service_types:
               # Use GenericServicePlugin for Docker/systemd/generic types
->             self.logger.debug(
->                 f"Instantiating GenericServicePlugin for service type '{service_type}'"
->             )
->             plugin = GenericServicePlugin(config=self.config, state=self.state)
+!             self.logger.debug(
+!                 f"Instantiating GenericServicePlugin for service type '{service_type}'"
+!             )
+!             plugin = GenericServicePlugin(config=self.config, state=self.state)
   
 !         else:
               # Should never reach here due to validation above, but for safety
@@ -254,12 +253,10 @@
 !             )
   
           # Cache the plugin
->         self._plugin_cache[service_type] = plugin
->         self.logger.debug(
->             f"Cached {plugin.name} for service type '{service_type}'"
->         )
+!         self._plugin_cache[service_type] = plugin
+!         self.logger.debug(f"Cached {plugin.name} for service type '{service_type}'")
   
->         return plugin
+!         return plugin
   
 >     def _clear_plugin_cache(self) -> None:
 >         """
@@ -271,16 +268,15 @@
 >         Example:
 >             >>> engine._clear_plugin_cache()
 >         """
->         self._plugin_cache.clear()
->         self.logger.debug("Plugin cache cleared")
+!         self._plugin_cache.clear()
+!         self.logger.debug("Plugin cache cleared")
   
       # ========================================================================
       # Backup Operations
       # ========================================================================
   
->     def _determine_backup_destination(
->         self, service: ServiceConfig
->     ) -> Dict[str, Any]:
+      # pylint: disable=too-many-locals
+>     def _determine_backup_destination(self, service: ServiceConfig) -> Dict[str, Any]:
 >         """
 >         Determine where and how to backup based on configuration.
   
@@ -342,9 +338,7 @@
 !                 try:
                       # Use a lightweight API endpoint to test connectivity
 !                     url = f"https://{server}:{port}/api2/json/version"
-!                     response = requests.get(
-!                         url, verify=verify_ssl, timeout=5
-!                     )
+!                     response = requests.get(url, verify=verify_ssl, timeout=5)
 !                     response.raise_for_status()
   
 !                     self.logger.info(
@@ -356,21 +350,21 @@
 !                         "pbs_config": pbs_config,
 !                     }
   
-!                 except requests.exceptions.Timeout:
+!                 except requests.exceptions.Timeout as exc:
 !                     raise BackupError(
 !                         f"PBS connectivity check failed: Connection to {server}:{port} timed out after 5 seconds. "
 !                         f"Please verify the server is reachable and the configuration is correct."
-!                     )
+!                     ) from exc
 !                 except requests.exceptions.ConnectionError as e:
 !                     raise BackupError(
 !                         f"PBS connectivity check failed: Cannot connect to {server}:{port}. "
 !                         f"Error: {e}. Please verify the server address and network connectivity."
-!                     )
+!                     ) from e
 !                 except requests.exceptions.RequestException as e:
 !                     raise BackupError(
 !                         f"PBS connectivity check failed for {server}:{port}: {e}. "
 !                         f"Please verify the PBS server is running and accessible."
-!                     )
+!                     ) from e
   
               # 1b. Check direct storage next
 !             direct_config = backup_config.get("direct_storage")
@@ -383,14 +377,16 @@
 !                 direct_path = direct_config.get("path")
 !                 if not direct_path:
 !                     raise BackupError(
-!                         f"Direct storage is enabled but path is not configured. "
-!                         f"Please set global.backup.direct_storage.path in your configuration."
+!                         "Direct storage is enabled but path is not configured. "
+!                         "Please set global.backup.direct_storage.path in your configuration."
 !                     )
   
                   # Cluster safety: Warn if path doesn't look like shared storage
 !                 path_str = str(direct_path)
 !                 shared_prefixes = ["/mnt", "/nfs", "/ceph"]
-!                 is_shared = any(path_str.startswith(prefix) for prefix in shared_prefixes)
+!                 is_shared = any(
+!                     path_str.startswith(prefix) for prefix in shared_prefixes
+!                 )
   
 !                 if not is_shared:
 !                     self.logger.warning(
@@ -426,6 +422,7 @@
 !             "path": backup_root,
 !         }
   
+      # pylint: disable=too-many-branches
 >     def _create_backup_metadata(
 >         self,
 >         service: ServiceConfig,
@@ -520,9 +517,7 @@
 !                 metadata["node"] = service.node
 !             else:
 !                 metadata["node"] = None
-!                 self.logger.debug(
-!                     f"Service {service.name} has no node specified"
-!                 )
+!                 self.logger.debug(f"Service {service.name} has no node specified")
 !         else:
               # Non-VM/LXC services don't have vmid or node
 !             metadata["vmid"] = None
@@ -550,11 +545,12 @@
   
 !         return metadata
   
+      # pylint: disable=too-many-locals,too-many-statements
 >     def _execute_backup_command(
 >         self,
 >         service: ServiceConfig,
 >         backup_destination: Dict[str, Any],
->         backup_metadata: Dict[str, Any],
+>         _backup_metadata: Dict[str, Any],
 >     ) -> Dict[str, Any]:
 >         """
 >         Execute the backup command based on the backup method.
@@ -649,9 +645,7 @@
 !                     result["error_message"] = (
 !                         "PBS backup failed. Check PBS server logs for details."
 !                     )
-!                     self.logger.error(
-!                         f"PBS backup failed for service '{service.name}'"
-!                     )
+!                     self.logger.error(f"PBS backup failed for service '{service.name}'")
   
 !             elif method == "direct":
                   # Direct storage backup: plugin creates backup at specified path
@@ -690,10 +684,8 @@
 !                     f"Unknown backup method '{method}' for service '{service.name}'"
 !                 )
   
-!         except Exception as e:
-              # Catch all exceptions and return failure result
-!             import traceback
-  
+!         except Exception as e:  # pylint: disable=broad-exception-caught
+              # Catch all exceptions and return failure result (intentionally broad for safety)
 !             error_msg = (
 !                 f"Backup execution failed for service '{service.name}' using {method} method: {e}. "
 !                 f"Check logs for details."
@@ -811,26 +803,20 @@
   
           # Check if directory exists (should always exist after _get_backup_directory)
 !         if not backup_dir.exists():
-!             self.logger.warning(
-!                 f"Backup directory does not exist: {backup_dir}"
-!             )
+!             self.logger.warning(f"Backup directory does not exist: {backup_dir}")
 !             return []
   
           # Get all files (not directories) in backup directory
 !         try:
 !             files = [f for f in backup_dir.iterdir() if f.is_file()]
 !         except OSError as e:
-!             self.logger.error(
-!                 f"Error reading backup directory {backup_dir}: {e}"
-!             )
+!             self.logger.error(f"Error reading backup directory {backup_dir}: {e}")
 !             return []
   
           # Sort by modification time (oldest first)
 !         files.sort(key=lambda f: f.stat().st_mtime)
   
-!         self.logger.debug(
-!             f"Found {len(files)} backup files for {service_name}"
-!         )
+!         self.logger.debug(f"Found {len(files)} backup files for {service_name}")
   
 !         return files
   
@@ -869,22 +855,58 @@
 >         """
 !         raise NotImplementedError
   
->     def get_last_backup_time(self, service_name: str) -> Optional[datetime]:
+>     def get_last_backup_time(self, service_name: str) -> Optional[str]:
 >         """
->         Get timestamp of last successful backup for a service.
+>         Get the timestamp of the last successful backup for a service.
   
 >         Args:
->             service_name: Service name
+>             service_name: Name of the service to query
   
 >         Returns:
->             Datetime of last backup, or None if never backed up
+>             ISO 8601 timestamp string of last backup, or None if never backed up
+  
+>         Raises:
+>             ValueError: If service_name is empty or invalid
+>             StateError: If state manager query fails
   
 >         Example:
 >             >>> last_backup = engine.get_last_backup_time("nextcloud")
 >             >>> if last_backup:
->             ...     print(f"Last backup: {last_backup.isoformat()}")
+>             ...     print(f"Last backup: {last_backup}")
 >         """
-!         raise NotImplementedError
+          # Validate input
+>         if not service_name or not isinstance(service_name, str):
+>             raise ValueError(
+>                 f"Service name must be a non-empty string, got: {service_name!r}"
+>             )
+  
+>         if not service_name.strip():
+>             raise ValueError("Service name cannot be empty or whitespace only")
+  
+          # Query StateManager
+>         try:
+>             self.logger.debug(
+>                 f"Querying last backup time for service '{service_name}'"
+>             )
+>             timestamp = self.state.get(f"last_backup.{service_name}")
+  
+>             if timestamp:
+>                 self.logger.debug(
+>                     f"Last backup for '{service_name}': {timestamp}"
+>                 )
+>             else:
+>                 self.logger.debug(
+>                     f"No backup history found for service '{service_name}'"
+>                 )
+  
+>             return timestamp
+  
+>         except Exception as e:
+>             error_msg = (
+>                 f"Failed to query backup time for service '{service_name}': {e}"
+>             )
+>             self.logger.error(error_msg)
+>             raise StateError(error_msg) from e
   
 >     def get_backup_status(self, service_name: str) -> Optional[str]:
 >         """

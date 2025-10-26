@@ -80,6 +80,7 @@ secrets/
 # Test artifacts
 test-results/
 coverage/
+cov_annotate/
 
 # Distribution / packaging
 dist/

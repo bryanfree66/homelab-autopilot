@@ -18,7 +18,7 @@ import requests
 
 from core.config_loader import ConfigLoader, ServiceConfig
 from lib.logger import get_logger
-from lib.state_manager import StateManager
+from lib.state_manager import StateError, StateManager
 from plugins.base import HypervisorPlugin, ServicePlugin
 from plugins.hypervisors.proxmox import ProxmoxPlugin
 from plugins.services.generic import GenericServicePlugin
@@ -855,22 +855,52 @@ class BackupEngine:
         """
         raise NotImplementedError
 
-    def get_last_backup_time(self, service_name: str) -> Optional[datetime]:
+    def get_last_backup_time(self, service_name: str) -> Optional[str]:
         """
-        Get timestamp of last successful backup for a service.
+        Get the timestamp of the last successful backup for a service.
 
         Args:
-            service_name: Service name
+            service_name: Name of the service to query
 
         Returns:
-            Datetime of last backup, or None if never backed up
+            ISO 8601 timestamp string of last backup, or None if never backed up
+
+        Raises:
+            ValueError: If service_name is empty or invalid
+            StateError: If state manager query fails
 
         Example:
             >>> last_backup = engine.get_last_backup_time("nextcloud")
             >>> if last_backup:
-            ...     print(f"Last backup: {last_backup.isoformat()}")
+            ...     print(f"Last backup: {last_backup}")
         """
-        raise NotImplementedError
+        # Validate input
+        if not service_name or not isinstance(service_name, str):
+            raise ValueError(
+                f"Service name must be a non-empty string, got: {service_name!r}"
+            )
+
+        if not service_name.strip():
+            raise ValueError("Service name cannot be empty or whitespace only")
+
+        # Query StateManager
+        try:
+            self.logger.debug(f"Querying last backup time for service '{service_name}'")
+            timestamp = self.state.get(f"last_backup.{service_name}")
+
+            if timestamp:
+                self.logger.debug(f"Last backup for '{service_name}': {timestamp}")
+            else:
+                self.logger.debug(
+                    f"No backup history found for service '{service_name}'"
+                )
+
+            return timestamp
+
+        except Exception as e:
+            error_msg = f"Failed to query backup time for service '{service_name}': {e}"
+            self.logger.error(error_msg)
+            raise StateError(error_msg) from e
 
     def get_backup_status(self, service_name: str) -> Optional[str]:
         """

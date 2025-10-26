@@ -29,16 +29,16 @@
 >             state: State manager instance
 >         """
           # Store full config and state for later use
->         self.config_loader = config
->         self.state_manager = state
+!         self.config_loader = config
+!         self.state_manager = state
   
           # Call parent with empty dict for now (base class expects dict)
->         super().__init__({})
+!         super().__init__({})
   
 >     @property
 >     def name(self) -> str:
 >         """Return the plugin name."""
->         return "ProxmoxPlugin"
+!         return "ProxmoxPlugin"
   
 >     def matches(self, target: Dict[str, Any]) -> bool:
 >         """Check if this plugin handles the given service."""
