@@ -10,6 +10,7 @@
   
 > import gzip
 > import tarfile
+> import textwrap
 > import time
 > import traceback
 > from datetime import datetime, timezone
@@ -878,65 +879,65 @@
 >             >>> print(f"Deleted {deleted} old backup files")
 >         """
           # Validate input
->         if not service_name or not isinstance(service_name, str):
->             raise ValueError(
->                 f"service_name must be a non-empty string, got: {service_name!r}"
->             )
+!         if not service_name or not isinstance(service_name, str):
+!             raise ValueError(
+!                 f"service_name must be a non-empty string, got: {service_name!r}"
+!             )
   
->         if not service_name.strip():
->             raise ValueError("service_name cannot be empty or whitespace only")
+!         if not service_name.strip():
+!             raise ValueError("service_name cannot be empty or whitespace only")
   
           # Get list of files to delete from retention policy
->         try:
->             files_to_delete = self._apply_retention_policy(service_name)
->         except BackupError:
+!         try:
+!             files_to_delete = self._apply_retention_policy(service_name)
+!         except BackupError:
               # Re-raise BackupError as-is
->             raise
->         except Exception as e:
+!             raise
+!         except Exception as e:
               # Wrap other exceptions in BackupError
->             raise BackupError(
->                 f"Failed to apply retention policy for '{service_name}': {e}"
->             ) from e
+!             raise BackupError(
+!                 f"Failed to apply retention policy for '{service_name}': {e}"
+!             ) from e
   
           # If no files to delete, return early
->         if not files_to_delete:
->             self.logger.info(f"No old backups to delete for '{service_name}'")
->             return 0
+!         if not files_to_delete:
+!             self.logger.info(f"No old backups to delete for '{service_name}'")
+!             return 0
   
           # Dry-run mode: log what would be deleted but don't delete
->         if self.dry_run:
->             self.logger.info(
->                 f"[DRY RUN] Would delete {len(files_to_delete)} old backups "
->                 f"for '{service_name}':"
->             )
->             for file_path in files_to_delete:
->                 self.logger.info(f"[DRY RUN]   - {file_path.name}")
->             return 0
+!         if self.dry_run:
+!             self.logger.info(
+!                 f"[DRY RUN] Would delete {len(files_to_delete)} old backups "
+!                 f"for '{service_name}':"
+!             )
+!             for file_path in files_to_delete:
+!                 self.logger.info(f"[DRY RUN]   - {file_path.name}")
+!             return 0
   
           # Delete files and count successes
->         deleted_count = 0
->         for file_path in files_to_delete:
->             try:
->                 file_path.unlink()
->                 deleted_count += 1
->                 self.logger.info(
->                     f"Deleted old backup for '{service_name}': {file_path.name}"
->                 )
->             except FileNotFoundError:
+!         deleted_count = 0
+!         for file_path in files_to_delete:
+!             try:
+!                 file_path.unlink()
+!                 deleted_count += 1
+!                 self.logger.info(
+!                     f"Deleted old backup for '{service_name}': {file_path.name}"
+!                 )
+!             except FileNotFoundError:
                   # File was already deleted (race condition or external deletion)
->                 self.logger.warning(
->                     f"Backup file already deleted for '{service_name}': "
->                     f"{file_path.name}"
->                 )
+!                 self.logger.warning(
+!                     f"Backup file already deleted for '{service_name}': "
+!                     f"{file_path.name}"
+!                 )
                   # Don't count as success, but continue with others
->                 continue
->             except PermissionError as e:
+!                 continue
+!             except PermissionError as e:
                   # Permission denied - log but continue
->                 self.logger.warning(
->                     f"Permission denied deleting backup for '{service_name}': "
->                     f"{file_path.name} - {e}"
->                 )
->                 continue
+!                 self.logger.warning(
+!                     f"Permission denied deleting backup for '{service_name}': "
+!                     f"{file_path.name} - {e}"
+!                 )
+!                 continue
 !             except OSError as e:
                   # Other OS error - log but continue
 !                 self.logger.warning(
@@ -946,12 +947,12 @@
 !                 continue
   
           # Log summary
->         self.logger.info(
->             f"Deleted {deleted_count} old backup(s) for '{service_name}' "
->             f"({len(files_to_delete) - deleted_count} failed)"
->         )
+!         self.logger.info(
+!             f"Deleted {deleted_count} old backup(s) for '{service_name}' "
+!             f"({len(files_to_delete) - deleted_count} failed)"
+!         )
   
->         return deleted_count
+!         return deleted_count
   
 >     def _get_backup_files(self, service_name: str) -> list[Path]:
 >         """
@@ -1470,20 +1471,160 @@
   
 !         return filename
   
->     def _send_backup_summary(self, results: Dict[str, bool]) -> None:
+>     def _send_backup_summary(
+>         self, results: Dict[str, bool], duration: Optional[float] = None
+>     ) -> None:
 >         """
->         Send summary notification after backup run.
+>         Send a summary notification after backup operations complete.
   
->         Sends a single notification with overview of all backup results.
+>         Formats and sends a summary of backup results via configured notification
+>         plugins. Includes success/failure counts, failed service details, and
+>         total duration. Gracefully handles notification failures (logs error but
+>         doesn't raise exception - notification failure shouldn't break backups).
   
 >         Args:
->             results: Dict of service_name -> success status
+>             results: Dict mapping service_name -> success status
+>                      Example: {"nextcloud": True, "adguard": False}
+>             duration: Optional total duration of backup run in seconds
+  
+>         Raises:
+>             ValueError: If results is empty or invalid
   
 >         Example:
 >             >>> results = {"nextcloud": True, "adguard": False, "plex": True}
->             >>> engine._send_backup_summary(results)
+>             >>> engine._send_backup_summary(results, duration=245.3)
 >         """
-!         raise NotImplementedError
+          # Validate input
+>         if not isinstance(results, dict):
+>             raise ValueError(f"results must be a dict, got: {type(results).__name__}")
+  
+>         if not results:
+>             raise ValueError("results cannot be empty")
+  
+          # Validate all keys are strings and all values are booleans
+>         for key, value in results.items():
+>             if not isinstance(key, str):
+>                 raise ValueError(
+>                     f"All result keys must be strings, got: {type(key).__name__}"
+>                 )
+>             if not isinstance(value, bool):
+>                 raise ValueError(
+>                     f"All result values must be booleans, got: {type(value).__name__} "
+>                     f"for service '{key}'"
+>                 )
+  
+          # Calculate summary stats
+>         total = len(results)
+>         succeeded = sum(1 for success in results.values() if success)
+>         failed = total - succeeded
+  
+          # Get lists of successful and failed services
+>         successful_services = [name for name, success in results.items() if success]
+>         failed_services = [name for name, success in results.items() if not success]
+  
+          # Build subject/title
+>         subject = f"Homelab Autopilot Backup Summary - {succeeded}/{total} Successful"
+  
+          # Build message body
+>         message_lines = [
+>             "Backup Run Complete",
+>             "=" * 19,
+>             f"Total Services: {total}",
+>             f"Successful: {succeeded}",
+>             f"Failed: {failed}",
+>         ]
+  
+          # Add duration if provided
+>         if duration is not None:
+>             message_lines.append(f"Duration: {duration:.1f} seconds")
+  
+>         message_lines.append("")  # Blank line
+  
+          # Add successful services list
+>         if successful_services:
+>             message_lines.append("Successful Backups:")
+>             for service_name in sorted(successful_services):
+>                 message_lines.append(f"- {service_name}")
+>             message_lines.append("")  # Blank line
+  
+          # Add failed services list with error messages
+>         if failed_services:
+>             message_lines.append("Failed Backups:")
+>             for service_name in sorted(failed_services):
+                  # Get error message from StateManager
+>                 error_key = f"backup_error.{service_name}"
+>                 error_msg = self.state.get(error_key)
+>                 if error_msg:
+>                     message_lines.append(f"- {service_name}: {error_msg}")
+>                 else:
+>                     message_lines.append(f"- {service_name}: (no error details)")
+  
+>         message = "\n".join(message_lines)
+  
+          # Log the summary
+>         self.logger.info(
+>             f"Backup summary: {succeeded}/{total} successful, {failed} failed"
+>         )
+  
+          # Dry-run mode: log what would be sent but don't send
+>         if self.dry_run:
+>             self.logger.info(
+>                 f"[DRY RUN] Would send notification: {subject}\n{message}"
+>             )
+>             return
+  
+          # Check if notification plugin is configured
+>         try:
+>             global_config = self.config.get("global")
+>             if global_config is None:
+>                 self.logger.info(
+>                     "No notification plugin configured, skipping notification"
+>                 )
+>                 return
+  
+>             notification_config = global_config.get("notification")
+>             if notification_config is None:
+>                 self.logger.info(
+>                     "No notification plugin configured, skipping notification"
+>                 )
+>                 return
+  
+              # Check if notifications are enabled
+>             if not notification_config.get("enabled", True):
+>                 self.logger.info("Notifications disabled, skipping notification")
+>                 return
+  
+>         except Exception as e:
+              # Configuration error - log but don't raise
+>             self.logger.error(f"Error checking notification configuration: {e}")
+>             return
+  
+          # Load and send via notification plugin
+>         try:
+              # TODO: Implement notification plugin loading when plugin system is ready
+              # For now, just log that we would send
+>             self.logger.info(f"Sending backup summary notification: {subject}")
+  
+              # Placeholder for future plugin loading:
+              # notification_plugin = self._get_notification_plugin()
+              # success = notification_plugin.send_notification(
+              #     title=subject,
+              #     message=message,
+              #     level="success" if failed == 0 else "warning",
+              #     metadata={"total": total, "succeeded": succeeded, "failed": failed}
+              # )
+              #
+              # if success:
+              #     self.logger.info("Backup summary notification sent successfully")
+              # else:
+              #     self.logger.error("Failed to send backup summary notification")
+  
+>         except Exception as e:
+              # Notification plugin error - log but don't raise
+              # Notification failure shouldn't break backup process
+>             self.logger.error(
+>                 f"Failed to send backup summary notification: {e}", exc_info=True
+>             )
   
 >     def _get_backup_config(self) -> Dict[str, Any]:
 >         """
