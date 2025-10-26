@@ -786,6 +786,173 @@ class BackupEngine:
         """
         raise NotImplementedError
 
+    def _apply_retention_policy(self, service_name: str) -> list[Path]:
+        """
+        Identify old backup files that should be deleted based on retention policy.
+
+        Compares backup file ages against retention_days configuration and
+        returns list of files that exceed the retention period.
+
+        Args:
+            service_name: Service name
+
+        Returns:
+            List of Path objects for files to delete (may be empty)
+
+        Raises:
+            BackupError: If backup directory doesn't exist or config is invalid
+
+        Example:
+            >>> old_files = engine._apply_retention_policy("nextcloud")
+            >>> print(f"Found {len(old_files)} old backups to delete")
+        """
+        # Get retention configuration
+        try:
+            backup_config = self._get_backup_config()
+            retention_days = backup_config.get("retention_days")
+
+            if retention_days is None or retention_days <= 0:
+                self.logger.debug(
+                    f"Retention policy disabled for '{service_name}' "
+                    f"(retention_days={retention_days})"
+                )
+                return []
+
+        except Exception as e:
+            raise BackupError(
+                f"Failed to get backup configuration for '{service_name}': {e}"
+            ) from e
+
+        # Get all backup files
+        all_files = self._get_backup_files(service_name)
+
+        if not all_files:
+            self.logger.debug(f"No backup files found for '{service_name}'")
+            return []
+
+        # Calculate cutoff time (now - retention_days)
+        cutoff_time = time.time() - (retention_days * 24 * 60 * 60)
+
+        # Identify files older than retention period
+        files_to_delete = []
+        for file_path in all_files:
+            try:
+                file_mtime = file_path.stat().st_mtime
+                if file_mtime < cutoff_time:
+                    files_to_delete.append(file_path)
+            except OSError as e:
+                self.logger.warning(
+                    f"Could not stat file {file_path} for '{service_name}': {e}"
+                )
+                # Continue with other files
+                continue
+
+        self.logger.debug(
+            f"Retention policy for '{service_name}': "
+            f"{len(files_to_delete)} of {len(all_files)} files exceed "
+            f"{retention_days}-day retention"
+        )
+
+        return files_to_delete
+
+    def _rotate_old_backups(self, service_name: str) -> int:
+        """
+        Execute retention policy by deleting old backup files.
+
+        Calls _apply_retention_policy() to identify old backups, then deletes them.
+        Logs each deletion and handles errors gracefully (deletion failures are
+        logged but don't raise exceptions - cleanup is best-effort).
+
+        Args:
+            service_name: Name of the service to rotate backups for
+
+        Returns:
+            Number of backups successfully deleted
+
+        Raises:
+            ValueError: If service_name is empty or invalid
+            BackupError: If _apply_retention_policy() fails or backup directory issues
+
+        Example:
+            >>> deleted = engine._rotate_old_backups("nextcloud")
+            >>> print(f"Deleted {deleted} old backup files")
+        """
+        # Validate input
+        if not service_name or not isinstance(service_name, str):
+            raise ValueError(
+                f"service_name must be a non-empty string, got: {service_name!r}"
+            )
+
+        if not service_name.strip():
+            raise ValueError("service_name cannot be empty or whitespace only")
+
+        # Get list of files to delete from retention policy
+        try:
+            files_to_delete = self._apply_retention_policy(service_name)
+        except BackupError:
+            # Re-raise BackupError as-is
+            raise
+        except Exception as e:
+            # Wrap other exceptions in BackupError
+            raise BackupError(
+                f"Failed to apply retention policy for '{service_name}': {e}"
+            ) from e
+
+        # If no files to delete, return early
+        if not files_to_delete:
+            self.logger.info(f"No old backups to delete for '{service_name}'")
+            return 0
+
+        # Dry-run mode: log what would be deleted but don't delete
+        if self.dry_run:
+            self.logger.info(
+                f"[DRY RUN] Would delete {len(files_to_delete)} old backups "
+                f"for '{service_name}':"
+            )
+            for file_path in files_to_delete:
+                self.logger.info(f"[DRY RUN]   - {file_path.name}")
+            return 0
+
+        # Delete files and count successes
+        deleted_count = 0
+        for file_path in files_to_delete:
+            try:
+                file_path.unlink()
+                deleted_count += 1
+                self.logger.info(
+                    f"Deleted old backup for '{service_name}': {file_path.name}"
+                )
+            except FileNotFoundError:
+                # File was already deleted (race condition or external deletion)
+                self.logger.warning(
+                    f"Backup file already deleted for '{service_name}': "
+                    f"{file_path.name}"
+                )
+                # Don't count as success, but continue with others
+                continue
+            except PermissionError as e:
+                # Permission denied - log but continue
+                self.logger.warning(
+                    f"Permission denied deleting backup for '{service_name}': "
+                    f"{file_path.name} - {e}"
+                )
+                continue
+            except OSError as e:
+                # Other OS error - log but continue
+                self.logger.warning(
+                    f"Error deleting backup for '{service_name}': "
+                    f"{file_path.name} - {e}"
+                )
+                continue
+
+        # Log summary
+        self.logger.info(
+            f"Deleted {deleted_count} old backup(s) for '{service_name}' "
+            f"({len(files_to_delete) - deleted_count} failed)"
+        )
+
+        return deleted_count
+
     def _get_backup_files(self, service_name: str) -> list[Path]:
         """
         Get all backup files for a service, sorted by age (oldest first).
