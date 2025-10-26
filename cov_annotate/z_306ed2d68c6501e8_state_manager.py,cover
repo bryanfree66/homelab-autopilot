@@ -155,17 +155,17 @@
 >         Raises:
 >             TypeError: If value type is not supported
 >         """
->         if value is None:
->             return ("null", "none")
->         elif isinstance(value, bool):
+!         if value is None:
+!             return ("null", "none")
+!         elif isinstance(value, bool):
               # Must check bool before int (bool is subclass of int)
 !             return (str(value), "bool")
->         elif isinstance(value, int):
+!         elif isinstance(value, int):
 !             return (str(value), "int")
->         elif isinstance(value, float):
+!         elif isinstance(value, float):
 !             return (str(value), "float")
->         elif isinstance(value, str):
->             return (value, "str")
+!         elif isinstance(value, str):
+!             return (value, "str")
 !         elif isinstance(value, datetime):
 !             return (value.isoformat(), "datetime")
 !         elif isinstance(value, (dict, list)):
@@ -187,16 +187,16 @@
 >         Raises:
 >             ValueError: If deserialization fails
 >         """
->         if type_name == "none":
->             return None
->         elif type_name == "bool":
+!         if type_name == "none":
+!             return None
+!         elif type_name == "bool":
 !             return value_str == "True"
->         elif type_name == "int":
+!         elif type_name == "int":
 !             return int(value_str)
->         elif type_name == "float":
+!         elif type_name == "float":
 !             return float(value_str)
->         elif type_name == "str":
->             return value_str
+!         elif type_name == "str":
+!             return value_str
 !         elif type_name == "datetime":
 !             return datetime.fromisoformat(value_str)
 !         elif type_name == "json":
@@ -224,19 +224,19 @@
 >             >>> state.get("nonexistent.key", "default_value")
 >             'default_value'
 >         """
->         with self._lock:
->             try:
->                 with self._get_connection() as conn:
->                     cursor = conn.execute(
->                         "SELECT value, type FROM state WHERE key = ?", (key,)
->                     )
->                     row = cursor.fetchone()
+!         with self._lock:
+!             try:
+!                 with self._get_connection() as conn:
+!                     cursor = conn.execute(
+!                         "SELECT value, type FROM state WHERE key = ?", (key,)
+!                     )
+!                     row = cursor.fetchone()
   
->                     if row is None:
->                         return default
+!                     if row is None:
+!                         return default
   
->                     value_str, type_name = row
->                     return self._deserialize_value(value_str, type_name)
+!                     value_str, type_name = row
+!                     return self._deserialize_value(value_str, type_name)
 !             except StateError:
 !                 raise
 !             except (sqlite3.Error, ValueError) as e:
@@ -262,22 +262,22 @@
 >             >>> state.set("update.count", 42)
 >             >>> state.set("config.settings", {"enabled": True, "retries": 3})
 >         """
->         try:
->             value_str, type_name = self._serialize_value(value)
+!         try:
+!             value_str, type_name = self._serialize_value(value)
 !         except TypeError as e:
 !             raise TypeError(f"Failed to serialize value for key '{key}': {e}") from e
   
->         with self._lock:
->             try:
->                 with self._get_connection() as conn:
->                     conn.execute(
->                         """
->                         INSERT OR REPLACE INTO state (key, value, type, updated_at)
->                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
->                         """,
->                         (key, value_str, type_name),
->                     )
->                     conn.commit()
+!         with self._lock:
+!             try:
+!                 with self._get_connection() as conn:
+!                     conn.execute(
+!                         """
+!                         INSERT OR REPLACE INTO state (key, value, type, updated_at)
+!                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+!                         """,
+!                         (key, value_str, type_name),
+!                     )
+!                     conn.commit()
 !             except StateError:
 !                 raise
 !             except sqlite3.Error as e:

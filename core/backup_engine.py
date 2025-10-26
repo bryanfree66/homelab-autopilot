@@ -8,11 +8,13 @@ direct storage, and file-based backups.
 
 # pylint: disable=too-many-lines
 
+import gzip
+import tarfile
 import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import requests
 
@@ -1013,6 +1015,212 @@ class BackupEngine:
             )
             self.logger.error(error_msg)
             raise StateError(error_msg) from e
+
+    # ========================================================================
+    # Backup Verification
+    # ========================================================================
+
+    def _verify_backup_integrity(
+        self,
+        backup_path: str,
+        service_name: str,
+        min_size_bytes: int = 1024,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Verify the integrity of a backup file.
+
+        Performs basic validation checks on a backup file to ensure it's usable:
+        - File exists and is readable
+        - File size is reasonable (not empty, meets minimum)
+        - For compressed files: basic archive integrity check
+
+        Args:
+            backup_path: Path to the backup file to verify
+            service_name: Name of service (for logging context)
+            min_size_bytes: Minimum expected file size (default 1KB)
+
+        Returns:
+            Tuple of (success: bool, error_message: Optional[str])
+            - (True, None) if backup is valid
+            - (False, "error message") if validation fails
+
+        Raises:
+            ValueError: If backup_path or service_name is empty/invalid
+
+        Example:
+            >>> success, error = engine._verify_backup_integrity(
+            ...     "/mnt/backups/nextcloud.tar.gz",
+            ...     "nextcloud",
+            ...     min_size_bytes=1024
+            ... )
+            >>> if success:
+            ...     print("Backup is valid")
+            ... else:
+            ...     print(f"Backup validation failed: {error}")
+        """
+        # Validate inputs
+        if not backup_path or not isinstance(backup_path, str):
+            raise ValueError(
+                f"backup_path must be a non-empty string, got: {backup_path!r}"
+            )
+
+        if not backup_path.strip():
+            raise ValueError("backup_path cannot be empty or whitespace only")
+
+        if not service_name or not isinstance(service_name, str):
+            raise ValueError(
+                f"service_name must be a non-empty string, got: {service_name!r}"
+            )
+
+        if not service_name.strip():
+            raise ValueError("service_name cannot be empty or whitespace only")
+
+        # Convert to Path object
+        backup_file = Path(backup_path)
+
+        # Check file existence
+        if not backup_file.exists():
+            error_msg = f"Backup file does not exist: {backup_path}"
+            self.logger.warning(
+                f"Backup verification failed for '{service_name}': {error_msg}"
+            )
+            return (False, error_msg)
+
+        # Check if file (not directory or other)
+        if not backup_file.is_file():
+            error_msg = f"Backup path is not a regular file: {backup_path}"
+            self.logger.warning(
+                f"Backup verification failed for '{service_name}': {error_msg}"
+            )
+            return (False, error_msg)
+
+        # Check file readability and size
+        try:
+            file_size = backup_file.stat().st_size
+
+            # Check for empty file
+            if file_size == 0:
+                error_msg = f"Backup file is empty (0 bytes): {backup_path}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+
+            # Check minimum size
+            if file_size < min_size_bytes:
+                error_msg = (
+                    f"Backup file size ({file_size} bytes) is below minimum "
+                    f"({min_size_bytes} bytes): {backup_path}"
+                )
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+
+        except PermissionError as e:
+            error_msg = f"Permission denied reading backup file: {backup_path}"
+            self.logger.warning(
+                f"Backup verification failed for '{service_name}': {error_msg} - {e}"
+            )
+            return (False, error_msg)
+        except OSError as e:
+            error_msg = f"OS error accessing backup file: {backup_path} - {e}"
+            self.logger.warning(
+                f"Backup verification failed for '{service_name}': {error_msg}"
+            )
+            return (False, error_msg)
+
+        # Check archive integrity for compressed files
+        backup_name_lower = backup_file.name.lower()
+
+        # Check tar.gz files
+        if backup_name_lower.endswith((".tar.gz", ".tgz")):
+            try:
+                if not tarfile.is_tarfile(backup_file):
+                    error_msg = (
+                        f"File has .tar.gz extension but is not a valid tar archive: "
+                        f"{backup_path}"
+                    )
+                    self.logger.warning(
+                        f"Backup verification failed for '{service_name}': {error_msg}"
+                    )
+                    return (False, error_msg)
+
+                # Try opening to verify integrity
+                with tarfile.open(backup_file, "r:gz") as tar:
+                    # Getting members list validates structure
+                    _ = tar.getmembers()
+
+            except tarfile.TarError as e:
+                error_msg = f"Corrupted tar.gz archive: {backup_path} - {e}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+            except OSError as e:
+                error_msg = f"Error reading tar.gz archive: {backup_path} - {e}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+
+        # Check plain tar files
+        elif backup_name_lower.endswith(".tar"):
+            try:
+                if not tarfile.is_tarfile(backup_file):
+                    error_msg = (
+                        f"File has .tar extension but is not a valid tar archive: "
+                        f"{backup_path}"
+                    )
+                    self.logger.warning(
+                        f"Backup verification failed for '{service_name}': {error_msg}"
+                    )
+                    return (False, error_msg)
+
+                # Try opening to verify integrity
+                with tarfile.open(backup_file, "r:") as tar:
+                    # Getting members list validates structure
+                    _ = tar.getmembers()
+
+            except tarfile.TarError as e:
+                error_msg = f"Corrupted tar archive: {backup_path} - {e}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+            except OSError as e:
+                error_msg = f"Error reading tar archive: {backup_path} - {e}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+
+        # Check gzip files (non-tar)
+        elif backup_name_lower.endswith(".gz"):
+            try:
+                with gzip.open(backup_file, "rb") as gz:
+                    # Read first byte to verify it's valid gzip
+                    _ = gz.read(1)
+
+            except gzip.BadGzipFile as e:
+                error_msg = f"Corrupted gzip file: {backup_path} - {e}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+            except OSError as e:
+                error_msg = f"Error reading gzip file: {backup_path} - {e}"
+                self.logger.warning(
+                    f"Backup verification failed for '{service_name}': {error_msg}"
+                )
+                return (False, error_msg)
+
+        # All checks passed
+        self.logger.info(
+            f"Backup verification successful for '{service_name}': "
+            f"{backup_path} ({file_size} bytes)"
+        )
+        return (True, None)
 
     # ========================================================================
     # Helper Methods
