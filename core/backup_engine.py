@@ -904,19 +904,51 @@ class BackupEngine:
 
     def get_backup_status(self, service_name: str) -> Optional[str]:
         """
-        Get status of last backup attempt for a service.
+        Get the status of the last backup attempt for a service.
 
         Args:
-            service_name: Service name
+            service_name: Name of the service to query
 
         Returns:
-            "success", "failed", or None if never attempted
+            Status string ("success" or "failed"), or None if never attempted
+
+        Raises:
+            ValueError: If service_name is empty or invalid
+            StateError: If state manager query fails
 
         Example:
             >>> status = engine.get_backup_status("nextcloud")
             >>> print(f"Last backup status: {status}")
         """
-        raise NotImplementedError
+        # Validate input
+        if not service_name or not isinstance(service_name, str):
+            raise ValueError(
+                f"Service name must be a non-empty string, got: {service_name!r}"
+            )
+
+        if not service_name.strip():
+            raise ValueError("Service name cannot be empty or whitespace only")
+
+        # Query StateManager
+        try:
+            self.logger.debug(f"Querying backup status for service '{service_name}'")
+            status = self.state.get(f"backup_status.{service_name}")
+
+            if status:
+                self.logger.debug(f"Backup status for '{service_name}': {status}")
+            else:
+                self.logger.debug(
+                    f"No backup status found for service '{service_name}'"
+                )
+
+            return status
+
+        except Exception as e:
+            error_msg = (
+                f"Failed to query backup status for service '{service_name}': {e}"
+            )
+            self.logger.error(error_msg)
+            raise StateError(error_msg) from e
 
     # ========================================================================
     # Helper Methods

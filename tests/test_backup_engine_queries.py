@@ -268,3 +268,220 @@ class TestGetLastBackupTime:
 
             # Verify exception chaining
             assert exc_info.value.__cause__ is original_exception
+
+
+class TestGetBackupStatus:
+    """Test get_backup_status() method."""
+
+    def test_service_with_successful_backup_returns_success(self, backup_engine):
+        """Test that service with successful backup returns 'success'."""
+        # Setup: Add a success status to state
+        backup_engine.state.set("backup_status.nextcloud", "success")
+
+        # Execute
+        result = backup_engine.get_backup_status("nextcloud")
+
+        # Verify
+        assert result == "success"
+        assert isinstance(result, str)
+
+    def test_service_with_failed_backup_returns_failed(self, backup_engine):
+        """Test that service with failed backup returns 'failed'."""
+        # Setup: Add a failed status to state
+        backup_engine.state.set("backup_status.gitlab", "failed")
+
+        # Execute
+        result = backup_engine.get_backup_status("gitlab")
+
+        # Verify
+        assert result == "failed"
+        assert isinstance(result, str)
+
+    def test_service_never_attempted_returns_none(self, backup_engine):
+        """Test that service without backup attempt returns None."""
+        # Execute: Query service that has never been backed up
+        result = backup_engine.get_backup_status("never-attempted-service")
+
+        # Verify
+        assert result is None
+
+    def test_empty_string_raises_value_error(self, backup_engine):
+        """Test that empty string service name raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            backup_engine.get_backup_status("")
+
+        error_msg = str(exc_info.value)
+        assert "empty" in error_msg.lower() or "whitespace" in error_msg.lower()
+
+    def test_none_input_raises_value_error(self, backup_engine):
+        """Test that None service name raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            backup_engine.get_backup_status(None)
+
+        error_msg = str(exc_info.value)
+        assert "non-empty string" in error_msg.lower()
+
+    def test_whitespace_only_raises_value_error(self, backup_engine):
+        """Test that whitespace-only service name raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            backup_engine.get_backup_status("   ")
+
+        error_msg = str(exc_info.value)
+        assert "empty" in error_msg.lower() or "whitespace" in error_msg.lower()
+
+    def test_state_manager_failure_raises_state_error(self, backup_engine):
+        """Test that StateManager exception is wrapped in StateError."""
+        # Mock state manager to raise exception
+        with patch.object(
+            backup_engine.state,
+            "get",
+            side_effect=Exception("Database connection failed"),
+        ):
+            with pytest.raises(StateError) as exc_info:
+                backup_engine.get_backup_status("test-service")
+
+            error_msg = str(exc_info.value)
+            assert "test-service" in error_msg
+            assert "Database connection failed" in error_msg
+
+    def test_multiple_services_no_crosstalk(self, backup_engine):
+        """Test that different services return their own statuses."""
+        # Setup: Add different statuses for different services
+        backup_engine.state.set("backup_status.service1", "success")
+        backup_engine.state.set("backup_status.service2", "failed")
+        backup_engine.state.set("backup_status.service3", "success")
+
+        # Execute: Query each service
+        result1 = backup_engine.get_backup_status("service1")
+        result2 = backup_engine.get_backup_status("service2")
+        result3 = backup_engine.get_backup_status("service3")
+
+        # Verify: Each returns its own status
+        assert result1 == "success"
+        assert result2 == "failed"
+        assert result3 == "success"
+
+    def test_only_valid_status_values(self, backup_engine):
+        """Test that only valid status values are returned."""
+        # Setup: Test valid statuses
+        backup_engine.state.set("backup_status.test1", "success")
+        backup_engine.state.set("backup_status.test2", "failed")
+
+        # Execute
+        status1 = backup_engine.get_backup_status("test1")
+        status2 = backup_engine.get_backup_status("test2")
+
+        # Verify: Only valid values
+        assert status1 in ["success", "failed", None]
+        assert status2 in ["success", "failed", None]
+
+    def test_service_name_with_special_characters(self, backup_engine):
+        """Test service names with special characters work correctly."""
+        # Setup: Service name with hyphens, underscores
+        service_name = "my-service_v2"
+        status = "success"
+        backup_engine.state.set(f"backup_status.{service_name}", status)
+
+        # Execute
+        result = backup_engine.get_backup_status(service_name)
+
+        # Verify
+        assert result == status
+
+    def test_query_same_service_multiple_times(self, backup_engine):
+        """Test querying same service multiple times returns same result."""
+        # Setup
+        status = "failed"
+        backup_engine.state.set("backup_status.test", status)
+
+        # Execute: Query multiple times
+        result1 = backup_engine.get_backup_status("test")
+        result2 = backup_engine.get_backup_status("test")
+        result3 = backup_engine.get_backup_status("test")
+
+        # Verify: All return same status
+        assert result1 == result2 == result3 == status
+
+    def test_integer_input_raises_value_error(self, backup_engine):
+        """Test that non-string input raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            backup_engine.get_backup_status(123)
+
+        error_msg = str(exc_info.value)
+        assert "non-empty string" in error_msg.lower()
+
+    def test_error_message_contains_service_name(self, backup_engine):
+        """Test that StateError includes service name for debugging."""
+        # Mock state manager to fail
+        with patch.object(
+            backup_engine.state, "get", side_effect=Exception("DB error")
+        ):
+            with pytest.raises(StateError) as exc_info:
+                backup_engine.get_backup_status("my-important-service")
+
+            error_msg = str(exc_info.value)
+            # Error should include service name for debugging
+            assert "my-important-service" in error_msg
+
+    def test_returns_none_not_empty_string(self, backup_engine):
+        """Test that method returns None, not empty string, for no status."""
+        # Execute: Query service with no status
+        result = backup_engine.get_backup_status("no-status")
+
+        # Verify: Should be None, not empty string
+        assert result is None
+        assert result != ""
+
+    def test_state_key_format(self, backup_engine):
+        """Test that state manager is queried with correct key format."""
+        # Mock state manager
+        mock_state = Mock()
+        mock_state.get.return_value = "success"
+        backup_engine.state = mock_state
+
+        # Execute
+        backup_engine.get_backup_status("my-service")
+
+        # Verify: State was queried with correct key
+        mock_state.get.assert_called_once_with("backup_status.my-service")
+
+    def test_case_sensitive_service_names(self, backup_engine):
+        """Test that service names are case-sensitive."""
+        # Setup: Different statuses for different cases
+        backup_engine.state.set("backup_status.MyService", "success")
+        backup_engine.state.set("backup_status.myservice", "failed")
+
+        # Execute
+        result1 = backup_engine.get_backup_status("MyService")
+        result2 = backup_engine.get_backup_status("myservice")
+
+        # Verify: Different results for different cases
+        assert result1 == "success"
+        assert result2 == "failed"
+        assert result1 != result2
+
+    def test_exception_chaining_preserved(self, backup_engine):
+        """Test that exception chaining is preserved for debugging."""
+        original_exception = RuntimeError("Original error")
+
+        with patch.object(backup_engine.state, "get", side_effect=original_exception):
+            with pytest.raises(StateError) as exc_info:
+                backup_engine.get_backup_status("test")
+
+            # Verify exception chaining
+            assert exc_info.value.__cause__ is original_exception
+
+    def test_success_and_failed_are_distinct(self, backup_engine):
+        """Test that 'success' and 'failed' statuses are clearly distinct."""
+        # Setup
+        backup_engine.state.set("backup_status.service1", "success")
+        backup_engine.state.set("backup_status.service2", "failed")
+
+        # Execute
+        success_status = backup_engine.get_backup_status("service1")
+        failed_status = backup_engine.get_backup_status("service2")
+
+        # Verify: Distinct values
+        assert success_status != failed_status
+        assert success_status == "success"
+        assert failed_status == "failed"
