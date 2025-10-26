@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import requests
 
-from core.config_loader import ConfigLoader, ServiceConfig
+from core.config_loader import ConfigError, ConfigLoader, ServiceConfig
 from lib.logger import get_logger
 from lib.state_manager import StateError, StateManager
 from plugins.base import HypervisorPlugin, ServicePlugin
@@ -139,34 +139,96 @@ class BackupEngine:
 
     def backup_all_services(self) -> Dict[str, bool]:
         """
-        Backup all enabled services with backup=true.
+        Execute backup operations for all configured services.
 
-        Iterates through all configured services, backs them up sequentially,
-        and sends a single summary notification at completion.
+        Iterates through all services in configuration, backing up each service
+        that has backup enabled. Aggregates results and sends summary notification.
+        Continues with remaining services even if individual backups fail.
 
         Returns:
             Dict mapping service_name -> success status
             Example: {"nextcloud": True, "adguard": False, "plex": True}
+
+        Raises:
+            ConfigError: If configuration cannot be loaded
 
         Example:
             >>> engine = BackupEngine(config, state)
             >>> results = engine.backup_all_services()
             >>> print(f"Backed up {sum(results.values())} services successfully")
         """
-        raise NotImplementedError
+        # Track start time for total duration
+        start_time = time.time()
+        results = {}
+
+        # Get all services and filter to backup-enabled
+        all_services = self.config.get_all_services()
+        backup_services = [s for s in all_services if s.backup]
+
+        # Early return if no services need backup
+        if not backup_services:
+            self.logger.info("No services configured for backup")
+            return {}
+
+        self.logger.info(f"Starting backup for {len(backup_services)} service(s)")
+
+        # Backup each service
+        for service in backup_services:
+            try:
+                success = self.backup_service(service.name)
+                results[service.name] = success
+            except Exception as e:
+                # Don't let one service failure stop others
+                self.logger.error(
+                    f"Unexpected error backing up {service.name}: {e}", exc_info=True
+                )
+                results[service.name] = False
+
+        # Calculate total duration
+        total_duration = time.time() - start_time
+
+        # Send summary notification
+        try:
+            self._send_backup_summary(results, duration=total_duration)
+        except Exception as e:
+            # Notification failure shouldn't fail backup run
+            self.logger.error(f"Failed to send backup summary: {e}", exc_info=True)
+
+        # Log final summary
+        succeeded = sum(1 for success in results.values() if success)
+        failed = len(results) - succeeded
+        self.logger.info(
+            f"Backup run complete: {succeeded}/{len(results)} successful "
+            f"in {total_duration:.1f}s"
+        )
+
+        return results
 
     def backup_service(self, service_name: str) -> bool:
         """
-        Backup a specific service by name.
+        Orchestrate backup operation for a single service.
+
+        This is the main backup orchestration method that coordinates all steps:
+        1. Validate service exists and backup is enabled
+        2. Get appropriate plugin for service type
+        3. Determine backup destination (PBS/direct/local)
+        4. Create backup directory if needed
+        5. Generate backup filename
+        6. Execute backup command via plugin
+        7. Verify backup integrity
+        8. Update backup state (success/failure)
+        9. Rotate old backups (on success)
+        10. Handle errors with proper state tracking
 
         Args:
-            service_name: Name of service to backup
+            service_name: Name of the service to backup
 
         Returns:
-            True if backup succeeded, False otherwise
+            True if backup succeeded, False if failed
 
         Raises:
-            ValueError: If service not found in configuration
+            ValueError: If service_name is empty or service not found
+            ConfigError: If service configuration is invalid
 
         Example:
             >>> engine = BackupEngine(config, state)
@@ -174,7 +236,155 @@ class BackupEngine:
             >>> if success:
             ...     print("Backup completed successfully")
         """
-        raise NotImplementedError
+        # Validate service_name is non-empty
+        if not service_name or not isinstance(service_name, str):
+            raise ValueError(
+                f"service_name must be a non-empty string, got: {type(service_name).__name__}"
+            )
+
+        if not service_name.strip():
+            raise ValueError("service_name cannot be empty or whitespace")
+
+        self.logger.info(f"Starting backup for {service_name}")
+
+        # Track start time for duration
+        start_time = time.time()
+
+        try:
+            # Get service configuration
+            service = self.config.get_service_config(service_name)
+            if service is None:
+                raise ValueError(f"Service '{service_name}' not found in configuration")
+
+            # Check if backup is enabled for this service
+            if not service.backup:
+                self.logger.info(
+                    f"Backup disabled for {service_name}, skipping (not an error)"
+                )
+                return True
+
+            # Dry-run mode check
+            if self.dry_run:
+                self.logger.info(
+                    f"[DRY RUN] Would backup {service_name} ({service.type})"
+                )
+                duration = time.time() - start_time
+                self._update_backup_state(
+                    service_name,
+                    success=True,
+                    backup_path="/tmp/dry-run-backup.tar.gz",
+                    duration=duration,
+                )
+                return True
+
+            # Get plugin for service type
+            plugin = self._get_plugin_for_service(service)
+
+            # Determine where backup should go
+            destination = self._determine_backup_destination(service)
+
+            # Get/create backup directory
+            backup_dir = self._get_backup_directory(service_name)
+
+            # Generate filename with timestamp
+            filename = self._generate_backup_filename(service_name, service.type)
+            backup_path = backup_dir / filename
+
+            # Create backup metadata for RTO tracking
+            metadata = self._create_backup_metadata(service, destination)
+
+            # Execute backup via plugin
+            result = self._execute_backup_command(service, destination, metadata)
+
+            if not result.get("success", False):
+                # Backup command failed
+                duration = time.time() - start_time
+                error_message = result.get("error_message", "Backup command failed")
+                self._update_backup_state(
+                    service_name,
+                    success=False,
+                    duration=duration,
+                    error_message=error_message,
+                )
+                self.logger.error(f"Backup failed for {service_name}: {error_message}")
+                return False
+
+            # Get actual backup path from result (might be different from requested)
+            actual_backup_path = result.get("backup_path")
+            if actual_backup_path is None:
+                # Use originally specified path
+                actual_backup_path = str(backup_path)
+
+            # Verify backup integrity
+            valid, error = self._verify_backup_integrity(
+                actual_backup_path, service_name
+            )
+
+            if not valid:
+                # Verification failed
+                duration = time.time() - start_time
+                error_message = f"Backup verification failed: {error}"
+                self._update_backup_state(
+                    service_name,
+                    success=False,
+                    duration=duration,
+                    error_message=error_message,
+                )
+                self.logger.error(f"Backup failed for {service_name}: {error_message}")
+                return False
+
+            # Calculate final duration
+            duration = time.time() - start_time
+
+            # Update state as successful
+            self._update_backup_state(
+                service_name,
+                success=True,
+                backup_path=actual_backup_path,
+                duration=duration,
+            )
+
+            self.logger.info(f"Backup completed for {service_name} in {duration:.1f}s")
+
+            # Rotate old backups (best effort - don't fail if this fails)
+            try:
+                deleted = self._rotate_old_backups(service_name)
+                if deleted > 0:
+                    self.logger.info(
+                        f"Rotated {deleted} old backup(s) for {service_name}"
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to rotate old backups for {service_name}: {e}"
+                )
+
+            return True
+
+        except (ValueError, ConfigError):
+            # Re-raise validation and config errors
+            raise
+
+        except Exception as e:
+            # Catch-all for unexpected errors
+            duration = time.time() - start_time
+            error_message = str(e)
+
+            # Update state to track the failure
+            try:
+                self._update_backup_state(
+                    service_name,
+                    success=False,
+                    duration=duration,
+                    error_message=error_message,
+                )
+            except Exception as state_error:
+                # State update failed, just log it
+                self.logger.error(
+                    f"Failed to update backup state for {service_name}: {state_error}"
+                )
+
+            self.logger.error(f"Backup failed for {service_name}: {error_message}")
+            return False
 
     # ========================================================================
     # Plugin Management
