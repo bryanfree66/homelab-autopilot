@@ -12,8 +12,10 @@ click>=8.1.0
 
 # HTTP requests (for monitoring)
 requests>=2.31.0
-psutil>=5.9.0
 
 # Process management
 psutil>=5.9.0
+
+# Proxmox API client
+proxmoxer>=2.0.0
 
