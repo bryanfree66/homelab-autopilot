@@ -6,9 +6,9 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Test Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](https://github.com/bryanfree66/homelab-autopilot)
-[![Tests](https://img.shields.io/badge/tests-424%20passing-success.svg)](https://github.com/bryanfree66/homelab-autopilot)
+[![Tests](https://img.shields.io/badge/tests-500%2B%20passing-success.svg)](https://github.com/bryanfree66/homelab-autopilot)
 
-> ⚠️ **Alpha Software**: Phase 2 nearly complete, moving to Phase 3. Not yet ready for production use, but alpha testing starting soon!
+> ⚠️ **Alpha Software**: Phase 2 complete! Phase 3 plugins in development. Alpha testing coming soon!
 
 ## 🎯 What is Homelab Autopilot?
 
@@ -60,12 +60,12 @@ Choose the right backend for your homelab size and complexity:
 1. **Compression-Only** (2-3x reduction)
    - Perfect for: Small homelabs, getting started, NFS to NAS
    - Simple setup, no additional infrastructure
-
+   
 2. **PBS Integration** (10-50x deduplication) ⭐ Recommended
    - Perfect for: Multi-VM homelabs, production-like setups
    - Leverage proven Proxmox Backup Server technology
    - Client-side encryption, verification jobs, incremental backups
-
+   
 3. **Native Chunking** (Phase 5+)
    - Perfect for: PBS-less setups wanting better deduplication
    - Lightweight content-addressable storage (5-15x reduction)
@@ -159,7 +159,7 @@ global:
     root: /mnt/backups/homelab
     retention_days: 30
     compression: true
-
+    
     # Optional: PBS integration
     proxmox_backup_server:
       enabled: true
@@ -173,12 +173,12 @@ services:
     vmid: 200
     node: pve  # Hint only - actual location queried via API
     backup: true
-
+    
   - name: home-assistant
     type: lxc
     vmid: 201
     backup: true
-
+    
   - name: immich
     type: docker
     compose_file: /opt/immich/docker-compose.yml
@@ -205,8 +205,8 @@ homelab-autopilot restore-test --service nextcloud
 
 ## 📊 Current Status
 
-**Version**: 0.3.0-alpha
-**Phase**: Phase 2 → Phase 3 transition (79% complete)
+**Version**: 0.3.0-alpha  
+**Phase**: Phase 3 in progress (Phase 2 complete!)
 
 ### Phase 1: Foundation ✅ COMPLETE
 **195 tests passing, 98% coverage, 10/10 pylint score**
@@ -219,11 +219,11 @@ homelab-autopilot restore-test --service nextcloud
 - ✅ **Test Infrastructure**: Fixtures, CI/CD, comprehensive coverage
 
 ### Phase 2: Backup System ✅ COMPLETE
-**424 tests passing, 95% coverage**
+**500+ tests passing, 95% coverage**
 
-**BackupEngine Core** (15/19 methods complete):
+**BackupEngine Core** (19/19 methods complete):
 - ✅ Configuration retrieval and caching
-- ✅ Timestamped backup filename generation
+- ✅ Timestamped backup filename generation  
 - ✅ Service backup directory management
 - ✅ Backup file listing and sorting
 - ✅ Retention policy enforcement
@@ -237,22 +237,40 @@ homelab-autopilot restore-test --service nextcloud
 - ✅ Old backup rotation and cleanup
 - ✅ Backup summary notifications
 - ✅ Plugin cache management with tests
-- ✅ Final orchestration methods (`backup_service`, `backup_all_services`)
+- ✅ **Single service orchestration** (`backup_service`)
+- ✅ **Full backup orchestration** (`backup_all_services`)
 
-**Current**: Plugin implementations (Proxmox, Generic Service, Email)
+### Phase 3: Plugin Implementation 🔄 IN PROGRESS
+**Core plugins being implemented**
 
-### Phase 3: Plugin Implementation 🔄
-- 📅 **ProxmoxPlugin**: VM/LXC backup via Proxmox API, PBS integration
-- 📅 **GenericServicePlugin**: Docker/config backups, application-aware
-- 📅 **EmailPlugin**: SMTP notifications, severity routing
-- 📅 **CLI**: Command-line interface (click-based)
+- 🔄 **ProxmoxPlugin** (in progress): VM/LXC backup via Proxmox API, PBS integration, cluster-aware
+- 🔄 **GenericServicePlugin** (in progress): Docker/config backups, systemd support, application-aware
+- 📅 **EmailPlugin** (next): SMTP notifications, severity routing
+- 📅 **CLI** (next): Command-line interface (click-based)
 - 📅 **Alpha Testing**: Real-world validation on production homelab
 
-### Phase 4+: Future Roadmap 🔮
-- **Phase 4**: Safe update system with rollback
-- **Phase 5**: Health monitoring and automated recovery
-- **Phase 6**: Scheduling, web dashboard, advanced features
-- **Phase 7**: Full cluster support, cloud backends, multi-hypervisor
+**Progress**: 2/4 Phase 3 components in active development
+
+### Phase 4: Update System 📅 COMING SOON
+- 📅 Safe update system with rollback
+- 📅 Cluster-aware update orchestration (rolling node updates)
+- 📅 Service-specific update plugins
+- 📅 External validation
+
+### Phase 5: Monitoring & Scheduling 📅 PLANNED
+- 📅 Health check engine with automated recovery
+- 📅 Multiple check types (HTTP, TCP, process, custom)
+- 📅 Cluster health monitoring (quorum, node reachability, HA services)
+- 📅 Scheduling via cron/systemd integration
+- 📅 Historical metrics and alerting
+
+### Phase 6: Advanced Features 📅 PLANNED
+- 📅 Full Proxmox cluster support (auto-detect topology, multi-node failover)
+- 📅 Web dashboard for monitoring
+- 📅 Additional hypervisors (ESXi, KVM)
+- 📅 Cloud storage backends (S3, B2, etc.)
+- 📅 Advanced notifications (Discord, Slack, webhooks)
+- 📅 Configuration discovery wizard
 
 ## 🛠️ Development Approach
 
@@ -262,7 +280,7 @@ homelab-autopilot restore-test --service nextcloud
 - **Configuration**: PyYAML + Pydantic v2 for validation
 - **State**: SQLite for persistence
 - **Logging**: loguru for structured logging
-- **Testing**: pytest with pytest-cov, pytest-mock (424 tests, 95% coverage)
+- **Testing**: pytest with pytest-cov, pytest-mock (500+ tests, 95% coverage)
 - **Code Quality**: black, isort, pylint (10/10 score), mypy
 - **API Integration**: proxmoxer for Proxmox VE
 
@@ -289,7 +307,7 @@ This project showcases an efficient AI-assisted development workflow:
 - **Claude Chat** for architecture, design decisions, and planning
 - **Claude Code CLI** for implementation and comprehensive test suites
 - **Separate token pools** = token-efficient, no burnout on large conversations
-- **Result**: Implemented 15 BackupEngine methods with 424 tests in focused sessions
+- **Result**: Completed Phase 2 (19 BackupEngine methods) and started Phase 3 plugins with 500+ tests in focused sessions
 
 **Why This Works**:
 1. **Architecture in chat** uses minimal tokens for high-level design

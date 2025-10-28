@@ -19,3 +19,6 @@ psutil>=5.9.0
 # Proxmox API client
 proxmoxer>=2.0.0
 
+# Docker client
+docker>=6.1.0
+
